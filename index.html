@@ -51,6 +51,14 @@
             justify-content: space-between;
             align-items: center;
         }
+        .delete-btn {
+            background-color: #dc3545;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .delete-btn:hover {
+            background-color: #a71d2a;
+        }
     </style>
 </head>
 <body>
@@ -88,22 +96,61 @@
     <ul id="watchlist"></ul>
 
     <script>
+        document.addEventListener('DOMContentLoaded', renderWatchlist);
+
+        function getWatchlist() {
+            const stored = localStorage.getItem('myWatchlist');
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        function saveWatchlist(watchlist) {
+            localStorage.setItem('myWatchlist', JSON.stringify(watchlist));
+        }
+
+        function renderWatchlist() {
+            const watchlist = document.getElementById('watchlist');
+            watchlist.innerHTML = '';
+            
+            const items = getWatchlist();
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span><strong>${item.title}</strong> (${item.genre}) - <em>${item.platform}</em></span>
+                    <button class="delete-btn" onclick="deleteItem(${index})">Delete</button>
+                `;
+                watchlist.appendChild(li);
+            });
+        }
+
         function addItem() {
             const titleInput = document.getElementById('title');
             const platformSelect = document.getElementById('platform');
             const genreSelect = document.getElementById('genre');
-            const watchlist = document.getElementById('watchlist');
 
             if (titleInput.value.trim() === '') {
                 alert('Please enter a title!');
                 return;
             }
 
-            const li = document.createElement('li');
-            li.innerHTML = `<span><strong>${titleInput.value}</strong> (${genreSelect.value}) - <em>${platformSelect.value}</em></span>`;
-            
-            watchlist.appendChild(li);
+            const newItem = {
+                title: titleInput.value.trim(),
+                platform: platformSelect.value,
+                genre: genreSelect.value
+            };
+
+            const items = getWatchlist();
+            items.push(newItem);
+            saveWatchlist(items);
+
+            renderWatchlist();
             titleInput.value = '';
+        }
+
+        function deleteItem(index) {
+            const items = getWatchlist();
+            items.splice(index, 1); // Removes 1 item at the specified position
+            saveWatchlist(items);
+            renderWatchlist();
         }
     </script>
 
