@@ -38,6 +38,17 @@
         button:hover {
             background-color: #0056b3;
         }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #e9e9f2;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .control-group {
+            flex: 1;
+        }
         ul {
             list-style-type: none;
             padding: 0;
@@ -93,6 +104,29 @@
     <button onclick="addItem()">Add to Watchlist</button>
 
     <h2>Saved Watchlist</h2>
+
+    <!-- Filter and Sort Controls -->
+    <div class="controls">
+        <div class="control-group">
+            <label for="genreFilter">Filter by Genre:</label>
+            <select id="genreFilter" onchange="renderWatchlist()">
+                <option value="All">All Genres</option>
+                <option value="Action">Action</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Drama">Drama</option>
+                <option value="Sci-Fi">Sci-Fi</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label for="sortBy">Sort By:</label>
+            <select id="sortBy" onchange="renderWatchlist()">
+                <option value="default">Default</option>
+                <option value="title-asc">Title (A-Z)</option>
+                <option value="title-desc">Title (Z-A)</option>
+            </select>
+        </div>
+    </div>
+
     <ul id="watchlist"></ul>
 
     <script>
@@ -109,14 +143,30 @@
 
         function renderWatchlist() {
             const watchlist = document.getElementById('watchlist');
+            const genreFilter = document.getElementById('genreFilter').value;
+            const sortBy = document.getElementById('sortBy').value;
             watchlist.innerHTML = '';
             
-            const items = getWatchlist();
-            items.forEach((item, index) => {
+            let items = getWatchlist();
+
+            // 1. Filter items by genre
+            if (genreFilter !== 'All') {
+                items = items.filter(item => item.genre === genreFilter);
+            }
+
+            // 2. Sort items
+            if (sortBy === 'title-asc') {
+                items.sort((a, b) => a.title.localeCompare(b.title));
+            } else if (sortBy === 'title-desc') {
+                items.sort((a, b) => b.title.localeCompare(a.title));
+            }
+
+            // 3. Render items to the screen
+            items.forEach(item => {
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <span><strong>${item.title}</strong> (${item.genre}) - <em>${item.platform}</em></span>
-                    <button class="delete-btn" onclick="deleteItem(${index})">Delete</button>
+                    <button class="delete-btn" onclick="deleteItem(${item.id})">Delete</button>
                 `;
                 watchlist.appendChild(li);
             });
@@ -133,6 +183,7 @@
             }
 
             const newItem = {
+                id: Date.now(), // Gives every item a unique timestamp ID
                 title: titleInput.value.trim(),
                 platform: platformSelect.value,
                 genre: genreSelect.value
@@ -146,9 +197,9 @@
             titleInput.value = '';
         }
 
-        function deleteItem(index) {
-            const items = getWatchlist();
-            items.splice(index, 1); // Removes 1 item at the specified position
+        function deleteItem(id) {
+            let items = getWatchlist();
+            items = items.filter(item => item.id !== id); // Remove matching ID
             saveWatchlist(items);
             renderWatchlist();
         }
