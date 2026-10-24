@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watchlist Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        h1 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            background: white;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 5px solid #007BFF;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>My Watchlist Manager</h1>
+
+    <div class="form-group">
+        <label for="title">Movie or TV Show Title:</label>
+        <input type="text" id="title" placeholder="e.g., Inception">
+    </div>
+
+    <div class="form-group">
+        <label for="platform">Streaming Platform:</label>
+        <select id="platform">
+            <option value="Netflix">Netflix</option>
+            <option value="Prime Video">Prime Video</option>
+            <option value="Disney+">Disney+</option>
+            <option value="Hotstar">Hotstar</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="genre">Genre:</label>
+        <select id="genre">
+            <option value="Action">Action</option>
+            <option value="Comedy">Comedy</option>
+            <option value="Drama">Drama</option>
+            <option value="Sci-Fi">Sci-Fi</option>
+        </select>
+    </div>
+
+    <button onclick="addItem()">Add to Watchlist</button>
+
+    <h2>Saved Watchlist</h2>
+    <ul id="watchlist"></ul>
+
+    <script>
+        function addItem() {
+            const titleInput = document.getElementById('title');
+            const platformSelect = document.getElementById('platform');
+            const genreSelect = document.getElementById('genre');
+            const watchlist = document.getElementById('watchlist');
+
+            if (titleInput.value.trim() === '') {
+                alert('Please enter a title!');
+                return;
+            }
+
+            const li = document.createElement('li');
+            li.innerHTML = `<span><strong>${titleInput.value}</strong> (${genreSelect.value}) - <em>${platformSelect.value}</em></span>`;
+            
+            watchlist.appendChild(li);
+            titleInput.value = '';
+        }
+    </script>
+
+</body>
+</html>
