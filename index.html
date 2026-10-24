@@ -3,17 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Manager</title>
+    <title>Watchlist Manager - Phase 3</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
+            max-width: 650px;
             margin: 40px auto;
             padding: 20px;
             background-color: #f4f4f9;
         }
         h1 {
             color: #333;
+        }
+        .form-section {
+            background: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
         }
         .form-group {
             margin-bottom: 15px;
@@ -23,10 +30,14 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input, select {
+        input[type="text"], select, textarea {
             width: 100%;
             padding: 8px;
             box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            height: 80px;
         }
         button {
             background-color: #007BFF;
@@ -34,10 +45,43 @@
             padding: 10px 15px;
             border: none;
             cursor: pointer;
+            border-radius: 3px;
         }
         button:hover {
             background-color: #0056b3;
         }
+        .danger-btn {
+            background-color: #dc3545;
+        }
+        .danger-btn:hover {
+            background-color: #a71d2a;
+        }
+        .warning-btn {
+            background-color: #ffc107;
+            color: #333;
+            font-weight: bold;
+        }
+        .warning-btn:hover {
+            background-color: #e0a800;
+        }
+        
+        /* Platform Badges */
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            color: white;
+            border-radius: 12px;
+            margin-left: 6px;
+        }
+        .badge-netflix { background-color: #E50914; }
+        .badge-prime { background-color: #00A8E1; }
+        .badge-disney { background-color: #113CCF; }
+        .badge-hotstar { background-color: #139287; }
+        .badge-default { background-color: #6c757d; }
+
+        /* Controls Panel */
         .controls {
             display: flex;
             gap: 10px;
@@ -45,22 +89,71 @@
             background: #e9e9f2;
             padding: 15px;
             border-radius: 5px;
+            align-items: flex-end;
+            flex-wrap: wrap;
         }
         .control-group {
             flex: 1;
+            min-width: 130px;
         }
+        .select-all-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            background: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .select-all-container label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        /* Watchlist Items */
         ul {
             list-style-type: none;
             padding: 0;
         }
         li {
             background: white;
-            padding: 10px;
+            padding: 12px;
             margin-bottom: 8px;
             border-left: 5px solid #007BFF;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 10px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+        }
+        li.watched {
+            background: #e2e2e2;
+            border-left-color: #6c757d;
+            opacity: 0.7;
+        }
+        li.watched .item-title {
+            text-decoration: line-through;
+            color: #555;
+        }
+        .item-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .item-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .toggle-btn {
+            background-color: #28a745;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .toggle-btn:hover {
+            background-color: #1e7e34;
         }
         .delete-btn {
             background-color: #dc3545;
@@ -76,36 +169,80 @@
 
     <h1>My Watchlist Manager</h1>
 
-    <div class="form-group">
-        <label for="title">Movie or TV Show Title:</label>
-        <input type="text" id="title" placeholder="e.g., Inception">
+    <!-- Single Add Section -->
+    <div class="form-section">
+        <h3>Add Single Item</h3>
+        <div class="form-group">
+            <label for="title">Movie or TV Show Title:</label>
+            <input type="text" id="title" placeholder="e.g., Inception">
+        </div>
+
+        <div class="form-group">
+            <label for="platform">Streaming Platform:</label>
+            <select id="platform">
+                <option value="Netflix">Netflix</option>
+                <option value="Prime Video">Prime Video</option>
+                <option value="Disney+">Disney+</option>
+                <option value="Hotstar">Hotstar</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="genre">Genre:</label>
+            <select id="genre">
+                <option value="Action">Action</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Drama">Drama</option>
+                <option value="Sci-Fi">Sci-Fi</option>
+            </select>
+        </div>
+
+        <button onclick="addItem()">Add to Watchlist</button>
     </div>
 
-    <div class="form-group">
-        <label for="platform">Streaming Platform:</label>
-        <select id="platform">
-            <option value="Netflix">Netflix</option>
-            <option value="Prime Video">Prime Video</option>
-            <option value="Disney+">Disney+</option>
-            <option value="Hotstar">Hotstar</option>
-        </select>
+    <!-- Bulk Upload Section -->
+    <div class="form-section">
+        <h3>Bulk Upload Titles</h3>
+        <div class="form-group">
+            <label for="bulkTitles">Paste Titles (one per line):</label>
+            <textarea id="bulkTitles" placeholder="Inception&#10;The Matrix&#10;Interstellar"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="bulkPlatform">Default Streaming Platform for Batch:</label>
+            <select id="bulkPlatform">
+                <option value="Netflix">Netflix</option>
+                <option value="Prime Video">Prime Video</option>
+                <option value="Disney+">Disney+</option>
+                <option value="Hotstar">Hotstar</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="bulkGenre">Default Genre for Batch:</label>
+            <select id="bulkGenre">
+                <option value="Action">Action</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Drama">Drama</option>
+                <option value="Sci-Fi">Sci-Fi</option>
+            </select>
+        </div>
+        <button onclick="bulkUpload()">Process Bulk Upload</button>
     </div>
-
-    <div class="form-group">
-        <label for="genre">Genre:</label>
-        <select id="genre">
-            <option value="Action">Action</option>
-            <option value="Comedy">Comedy</option>
-            <option value="Drama">Drama</option>
-            <option value="Sci-Fi">Sci-Fi</option>
-        </select>
-    </div>
-
-    <button onclick="addItem()">Add to Watchlist</button>
 
     <h2>Saved Watchlist</h2>
 
-    <!-- Filter and Sort Controls -->
+    <!-- Live Search Input -->
+    <div class="form-group">
+        <label for="searchQuery">🔍 Search Watchlist:</label>
+        <input type="text" id="searchQuery" placeholder="Type a movie title to filter instantly..." oninput="renderWatchlist()">
+    </div>
+
+    <!-- Select All Bar -->
+    <div class="select-all-container">
+        <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
+        <label for="selectAll"><strong>Select / Deselect All Visible Items</strong></label>
+    </div>
+
+    <!-- Filter, Sort, Delete Controls -->
     <div class="controls">
         <div class="control-group">
             <label for="genreFilter">Filter by Genre:</label>
@@ -125,6 +262,12 @@
                 <option value="title-desc">Title (Z-A)</option>
             </select>
         </div>
+        <div class="control-group">
+            <button class="warning-btn" onclick="deleteSelectedItems()" style="width: 100%;">Delete Selected</button>
+        </div>
+        <div class="control-group">
+            <button class="danger-btn" onclick="clearAllItems()" style="width: 100%;">Delete All</button>
+        </div>
     </div>
 
     <ul id="watchlist"></ul>
@@ -141,32 +284,65 @@
             localStorage.setItem('myWatchlist', JSON.stringify(watchlist));
         }
 
+        function getPlatformBadgeClass(platform) {
+            switch(platform) {
+                case 'Netflix': return 'badge-netflix';
+                case 'Prime Video': return 'badge-prime';
+                case 'Disney+': return 'badge-disney';
+                case 'Hotstar': return 'badge-hotstar';
+                default: return 'badge-default';
+            }
+        }
+
         function renderWatchlist() {
             const watchlist = document.getElementById('watchlist');
             const genreFilter = document.getElementById('genreFilter').value;
             const sortBy = document.getElementById('sortBy').value;
-            watchlist.innerHTML = '';
+            const searchQuery = document.getElementById('searchQuery').value.toLowerCase().trim();
             
+            watchlist.innerHTML = '';
+            document.getElementById('selectAll').checked = false;
+
             let items = getWatchlist();
 
-            // 1. Filter items by genre
+            // 1. Filter by Search Query
+            if (searchQuery !== '') {
+                items = items.filter(item => item.title.toLowerCase().includes(searchQuery));
+            }
+
+            // 2. Filter by Genre
             if (genreFilter !== 'All') {
                 items = items.filter(item => item.genre === genreFilter);
             }
 
-            // 2. Sort items
+            // 3. Sort items
             if (sortBy === 'title-asc') {
                 items.sort((a, b) => a.title.localeCompare(b.title));
             } else if (sortBy === 'title-desc') {
                 items.sort((a, b) => b.title.localeCompare(a.title));
             }
 
-            // 3. Render items to the screen
+            // 4. Render items
             items.forEach(item => {
                 const li = document.createElement('li');
+                if (item.watched) {
+                    li.classList.add('watched');
+                }
+
+                const badgeClass = getPlatformBadgeClass(item.platform);
+
                 li.innerHTML = `
-                    <span><strong>${item.title}</strong> (${item.genre}) - <em>${item.platform}</em></span>
-                    <button class="delete-btn" onclick="deleteItem(${item.id})">Delete</button>
+                    <div class="item-left">
+                        <input type="checkbox" class="item-checkbox" data-id="${item.id}">
+                        <span class="item-title"><strong>${item.title}</strong> (${item.genre})</span>
+                        <span class="badge ${badgeClass}">${item.platform}</span>
+                    </div>
+                    <div class="item-actions">
+                        <button class="toggle-btn" onclick="toggleWatched(${item.id})">
+                            ${item.watched ? 'Unwatch' : 'Mark Watched'}
+                        </button>
+                        <button class="delete-btn" onclick="deleteItem(${item.id})">Delete</button>
+                    </div>
                 `;
                 watchlist.appendChild(li);
             });
@@ -183,10 +359,11 @@
             }
 
             const newItem = {
-                id: Date.now(), // Gives every item a unique timestamp ID
+                id: Date.now(),
                 title: titleInput.value.trim(),
                 platform: platformSelect.value,
-                genre: genreSelect.value
+                genre: genreSelect.value,
+                watched: false
             };
 
             const items = getWatchlist();
@@ -197,11 +374,92 @@
             titleInput.value = '';
         }
 
-        function deleteItem(id) {
+        function bulkUpload() {
+            const bulkText = document.getElementById('bulkTitles').value;
+            const platformSelect = document.getElementById('bulkPlatform');
+            const genreSelect = document.getElementById('bulkGenre');
+
+            if (bulkText.trim() === '') {
+                alert('Please paste at least one title in the text box!');
+                return;
+            }
+
+            const lines = bulkText.split('\n');
             let items = getWatchlist();
-            items = items.filter(item => item.id !== id); // Remove matching ID
+            let addedCount = 0;
+
+            lines.forEach((line, index) => {
+                const title = line.trim();
+                if (title !== '') {
+                    const newItem = {
+                        id: Date.now() + index,
+                        title: title,
+                        platform: platformSelect.value,
+                        genre: genreSelect.value,
+                        watched: false
+                    };
+                    items.push(newItem);
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                saveWatchlist(items);
+                renderWatchlist();
+                document.getElementById('bulkTitles').value = '';
+                alert(`Successfully added ${addedCount} items to your watchlist!`);
+            } else {
+                alert('No valid titles found in the text box.');
+            }
+        }
+
+        function toggleWatched(id) {
+            let items = getWatchlist();
+            items = items.map(item => {
+                if (item.id === id) {
+                    return { ...item, watched: !item.watched };
+                }
+                return item;
+            });
             saveWatchlist(items);
             renderWatchlist();
+        }
+
+        function deleteItem(id) {
+            let items = getWatchlist();
+            items = items.filter(item => item.id !== id);
+            saveWatchlist(items);
+            renderWatchlist();
+        }
+
+        function toggleSelectAll(masterCheckbox) {
+            const checkboxes = document.querySelectorAll('.item-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = masterCheckbox.checked;
+            });
+        }
+
+        function deleteSelectedItems() {
+            const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('Please select at least one item to delete.');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete ${checkboxes.length} selected item(s)?`)) {
+                const selectedIds = Array.from(checkboxes).map(cb => Number(cb.dataset.id));
+                let items = getWatchlist();
+                items = items.filter(item => !selectedIds.includes(item.id));
+                saveWatchlist(items);
+                renderWatchlist();
+            }
+        }
+
+        function clearAllItems() {
+            if (confirm('Are you sure you want to delete your entire watchlist?')) {
+                localStorage.removeItem('myWatchlist');
+                renderWatchlist();
+            }
         }
     </script>
 
