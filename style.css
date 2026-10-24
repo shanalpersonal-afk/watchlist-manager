@@ -45,7 +45,7 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-/* Responsive Form Panels */
+/* Form Panels */
 .grid-forms {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -99,15 +99,6 @@ textarea {
     height: 65px;
 }
 
-.form-row {
-    display: flex;
-    gap: 10px;
-}
-
-.form-row .form-group {
-    flex: 1;
-}
-
 button {
     padding: 10px 14px;
     border-radius: 6px;
@@ -126,11 +117,6 @@ button {
 
 .btn-primary:hover {
     background: #4f46e5;
-}
-
-.btn-secondary {
-    background: #334155;
-    color: white;
 }
 
 .btn-danger {
@@ -249,10 +235,10 @@ button {
     border-radius: 10px;
 }
 
-/* Cards & Responsive Breakpoints */
+/* Card Layout & Poster Image Styling */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 12px;
     margin-top: 10px;
 }
@@ -261,11 +247,16 @@ button {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 14px;
+    padding: 12px;
     display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
+    position: relative;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.movie-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent-blue);
 }
 
 .movie-card.watched {
@@ -278,14 +269,33 @@ button {
     color: var(--text-muted);
 }
 
-.card-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
+.poster-box {
+    width: 70px;
+    height: 100px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #0f172a;
+    flex-shrink: 0;
 }
 
-.card-title-box {
+.poster-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.card-body {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
 }
 
 .card-title {
@@ -297,7 +307,7 @@ button {
 .card-meta {
     font-size: 12px;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: 3px;
 }
 
 .api-details {
@@ -315,6 +325,7 @@ button {
     color: white;
     border-radius: 10px;
     text-transform: uppercase;
+    flex-shrink: 0;
 }
 .badge-netflix { background: var(--netflix-red); }
 .badge-prime { background: var(--prime-blue); }
@@ -326,11 +337,12 @@ button {
     justify-content: space-between;
     align-items: center;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    padding-top: 8px;
+    padding-top: 6px;
+    margin-top: 6px;
 }
 
 .btn-small {
-    padding: 5px 10px;
+    padding: 4px 8px;
     font-size: 11px;
 }
 
@@ -353,7 +365,6 @@ button {
     font-size: 14px;
 }
 
-/* Responsive UX Adjustments for Tablets and Mobile */
 @media (max-width: 768px) {
     body {
         padding: 15px 10px;
