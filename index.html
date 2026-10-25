@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio - v2.5.0</title>
+    <title>Watchlist Studio - v2.6.0</title>
     <!-- Tailwind CSS CDN with dark mode configured via 'class' -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -22,34 +22,96 @@
     </script>
     <!-- Firebase SDKs (Browser Compat Version) -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased transition-colors duration-200">
 
-    <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+    <!-- Splash Cover Screen (shown by default when logged out) -->
+    <div id="splashScreen" class="min-h-screen flex items-center justify-center px-4 py-12">
+        <div class="max-w-xl w-full bg-slate-900/80 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-md text-center space-y-8">
+            <div class="space-y-3">
+                <span class="text-4xl">🍿</span>
+                <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-400 to-cyan-300 bg-clip-text text-transparent">
+                    Watchlist Studio
+                </h1>
+                <p class="text-lg font-semibold text-slate-200">Your Centralized Media Dashboard</p>
+                <p class="text-xs text-slate-400 max-w-md mx-auto">
+                    Track titles across OTT networks, auto-detect streaming availability in India, and collaborate with live sync.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
+                    <span class="text-emerald-400 text-sm">✓</span>
+                    <span class="text-xs font-medium text-slate-300">Track India Streaming (IN)</span>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
+                    <span class="text-yellow-400 text-sm">★</span>
+                    <span class="text-xs font-medium text-slate-300">Fetch Ratings & Posters</span>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
+                    <span class="text-sky-400 text-sm">🗂️</span>
+                    <span class="text-xs font-medium text-slate-300">Group by Genre/Language</span>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
+                    <span class="text-indigo-400 text-sm">⚡</span>
+                    <span class="text-xs font-medium text-slate-300">Live Multi-Device Sync</span>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button id="googleSignInBtn" type="button" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold px-6 py-3 rounded-xl text-sm shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.99] cursor-pointer">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>Sign in with Google</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Dashboard (hidden until user signs in) -->
+    <div id="appDashboard" class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6 hidden">
         <!-- Header -->
         <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-slate-800">
             <div>
                 <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-400 to-cyan-300 bg-clip-text text-transparent flex items-center gap-3">
                     🍿 Watchlist Studio 
-                    <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800/90 text-sky-400 border border-slate-700">v2.5.0</span>
+                    <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800/90 text-sky-400 border border-slate-700">v2.6.0</span>
                 </h1>
                 <p class="text-xs text-slate-400 mt-1">Multi-platform streaming aggregator with real-time sync</p>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center flex-wrap gap-2.5 sm:gap-3">
                 <button id="themeToggleBtn" type="button" aria-label="Toggle Theme" class="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 hover:text-white transition shadow-sm">
                     <span id="themeIcon">🌙</span>
                     <span class="hidden sm:inline font-medium">Theme</span>
                 </button>
+
+                <!-- User Profile Info block -->
+                <div id="userProfileInfo" class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-xl shadow-inner">
+                    <img id="userAvatar" src="" alt="Avatar" class="w-6 h-6 rounded-full object-cover border border-slate-700 hidden">
+                    <span id="userDisplayName" class="text-xs font-medium text-slate-200"></span>
+                    <button id="startTourBtn" type="button" class="px-2 py-1 text-[11px] font-medium bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/60 rounded-lg transition shadow-sm">
+                        Tour
+                    </button>
+                    <button id="signOutBtn" type="button" class="px-2 py-1 text-[11px] font-medium bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 rounded-lg transition shadow-sm">
+                        Sign Out
+                    </button>
+                </div>
+
                 <div class="user-profile flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl shadow-inner">
-                    <span class="text-xs text-slate-400 font-medium">👤</span>
-                    <input type="text" id="userNameInput" placeholder="Your Name (e.g., Rahul)" class="bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none w-40 sm:w-48">
+                    <span class="text-xs text-slate-400 font-medium">🏷️</span>
+                    <input type="text" id="userNameInput" placeholder="Item Tag (e.g., Rahul)" class="bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none w-32 sm:w-40">
                 </div>
             </div>
         </header>
 
         <!-- Collapsible Add & Bulk Upload Panel -->
-        <details class="group bg-slate-900/70 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg transition-all" open>
+        <details id="actionDrawer" class="group bg-slate-900/70 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg transition-all" open>
             <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none bg-slate-900/90 hover:bg-slate-800/60 transition-colors">
                 <div class="flex items-center gap-2.5">
                     <span class="text-base text-sky-400">✨</span>
@@ -105,114 +167,128 @@
             </div>
         </details>
 
-        <!-- Multi-Filter Toolbar -->
-        <div class="toolbar bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 shadow-lg space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3.5">
-                <div class="toolbar-group sm:col-span-2">
-                    <label for="searchQuery" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">🔍 Search Watchlist</label>
-                    <input type="text" id="searchQuery" placeholder="Search by keyword..." oninput="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition">
-                </div>
-                <div class="toolbar-group">
-                    <label for="filterType" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Type Filter</label>
-                    <select id="filterType" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="All">All Types</option>
-                        <option value="movie">Movies Only</option>
-                        <option value="tv">TV Shows Only</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <label for="filterPlatform" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Platform Filter</label>
-                    <select id="filterPlatform" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="All">All Platforms</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <label for="filterGenre" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Genre Filter</label>
-                    <select id="filterGenre" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="All">All Genres</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <label for="filterLanguage" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Language Filter</label>
-                    <select id="filterLanguage" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="All">All Languages</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <label for="filterStatus" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Status Filter</label>
-                    <select id="filterStatus" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="All">All Statuses</option>
-                        <option value="towatch">To Watch</option>
-                        <option value="watched">Watched</option>
-                    </select>
-                </div>
-                <div class="toolbar-group">
-                    <label for="sortBy" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Sort Order</label>
-                    <select id="sortBy" onchange="renderWatchlist()"
-                        class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                        <option value="default">Default</option>
-                        <option value="title-asc">Title (A-Z)</option>
-                        <option value="title-desc">Title (Z-A)</option>
-                        <option value="rating-desc">Highest Rated</option>
-                    </select>
-                </div>
+        <!-- Search & Filter Controls Header -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div class="flex-1 relative">
+                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">🔍</span>
+                <input type="text" id="searchQuery" placeholder="Search by title..." oninput="renderWatchlist()"
+                    class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition shadow-sm">
             </div>
+            <button id="toggleFilterDrawerBtn" type="button" onclick="document.getElementById('filterDrawer').classList.toggle('hidden')"
+                class="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-200 hover:text-white transition shadow-sm cursor-pointer whitespace-nowrap">
+                <span>🎛️</span>
+                <span>Filters & Views</span>
+            </button>
+        </div>
 
-            <!-- Group Builder Section & Action Controls -->
-            <div class="pt-3 border-t border-slate-800/80 space-y-3.5">
-                <!-- Sleek Tailwind Group Builder -->
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm">🗂️</span>
-                        <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Group Builder:</span>
+        <!-- Collapsible Filter & Group Builder Drawer (hidden by default on mobile, block on md+) -->
+        <div id="filterDrawer" class="hidden md:block">
+            <div class="toolbar bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 shadow-lg space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                    <div class="toolbar-group">
+                        <label for="filterType" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Type Filter</label>
+                        <select id="filterType" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="All">All Types</option>
+                            <option value="movie">Movies Only</option>
+                            <option value="tv">TV Shows Only</option>
+                        </select>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 max-w-xl">
-                        <div class="flex items-center gap-2">
-                            <label for="primaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Primary:</label>
-                            <select id="primaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
-                                <option value="none">None</option>
-                                <option value="platform">Platform</option>
-                                <option value="genre">Genre</option>
-                                <option value="type">Type</option>
-                                <option value="status">Status</option>
-                                <option value="language">Language</option>
-                            </select>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label for="secondaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Secondary:</label>
-                            <select id="secondaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
-                                <option value="none">None</option>
-                                <option value="platform">Platform</option>
-                                <option value="genre">Genre</option>
-                                <option value="type">Type</option>
-                                <option value="status">Status</option>
-                                <option value="language">Language</option>
-                            </select>
-                        </div>
+                    <div class="toolbar-group">
+                        <label for="filterPlatform" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Platform Filter</label>
+                        <select id="filterPlatform" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="All">All Platforms</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-group">
+                        <label for="filterGenre" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Genre Filter</label>
+                        <select id="filterGenre" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="All">All Genres</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-group">
+                        <label for="filterLanguage" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Language Filter</label>
+                        <select id="filterLanguage" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="All">All Languages</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-group">
+                        <label for="filterStatus" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Status Filter</label>
+                        <select id="filterStatus" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="All">All Statuses</option>
+                            <option value="towatch">To Watch</option>
+                            <option value="watched">Watched</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Toolbar Actions and View Selector -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <!-- View selector tabs -->
-                    <div class="grouping-bar flex items-center flex-wrap gap-1.5">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 mr-2">Quick Views:</span>
-                        <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-sky-400 text-slate-950 font-bold transition shadow-sm active" id="tab-none" onclick="setGrouping('none')">All (List View)</button>
-                        <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-genre" onclick="setGrouping('genre')">Group by Genre</button>
-                        <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-platform" onclick="setGrouping('platform')">Group by Platform</button>
-                        <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-type" onclick="setGrouping('type')">Group by Type</button>
-                        <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-status" onclick="setGrouping('status')">Group by Status</button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div class="toolbar-group">
+                        <label for="sortBy" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Sort Order</label>
+                        <select id="sortBy" onchange="renderWatchlist()"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
+                            <option value="default">Default</option>
+                            <option value="title-asc">Title (A-Z)</option>
+                            <option value="title-desc">Title (Z-A)</option>
+                            <option value="rating-desc">Highest Rated</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Group Builder Section & Action Controls -->
+                <div class="pt-3 border-t border-slate-800/80 space-y-3.5">
+                    <!-- Sleek Tailwind Group Builder -->
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm">🗂️</span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Group Builder:</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 max-w-xl">
+                            <div class="flex items-center gap-2">
+                                <label for="primaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Primary:</label>
+                                <select id="primaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
+                                    <option value="none">None</option>
+                                    <option value="platform">Platform</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="type">Type</option>
+                                    <option value="status">Status</option>
+                                    <option value="language">Language</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label for="secondaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Secondary:</label>
+                                <select id="secondaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
+                                    <option value="none">None</option>
+                                    <option value="platform">Platform</option>
+                                    <option value="genre">Genre</option>
+                                    <option value="type">Type</option>
+                                    <option value="status">Status</option>
+                                    <option value="language">Language</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="toolbar-actions flex items-center gap-2">
-                        <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600/90 hover:bg-amber-600 text-white shadow-sm transition" onclick="deleteSelectedItems()">Delete Selected</button>
-                        <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition" onclick="clearAllItems()">Delete All</button>
+                    <!-- Toolbar Actions and View Selector -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <!-- View selector tabs -->
+                        <div class="grouping-bar flex items-center flex-wrap gap-1.5">
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 mr-2">Quick Views:</span>
+                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-sky-400 text-slate-950 font-bold transition shadow-sm active" id="tab-none" onclick="setGrouping('none')">All (List View)</button>
+                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-genre" onclick="setGrouping('genre')">Group by Genre</button>
+                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-platform" onclick="setGrouping('platform')">Group by Platform</button>
+                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-type" onclick="setGrouping('type')">Group by Type</button>
+                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-status" onclick="setGrouping('status')">Group by Status</button>
+                        </div>
+
+                        <div class="toolbar-actions flex items-center gap-2">
+                            <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600/90 hover:bg-amber-600 text-white shadow-sm transition" onclick="deleteSelectedItems()">Delete Selected</button>
+                            <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition" onclick="clearAllItems()">Delete All</button>
+                        </div>
                     </div>
                 </div>
             </div>

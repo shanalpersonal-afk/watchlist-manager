@@ -1,10 +1,8 @@
-// High-Reliability API Configuration
-const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
-const OMDB_API_KEY = "trilogy";
-
-// Firebase Configuration for Watchlist Studio
+// ==========================================
+// 1. Firebase Configuration & Initialization
+// ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDZUG-4XfUscT_SQHfVsA3YC0DlfCSiCvI",
+  apiKey: "YOUR_REAL_API_KEY", // Make sure your real API key is pasted here
   authDomain: "watchlist-studio-14978.firebaseapp.com",
   projectId: "watchlist-studio-14978",
   storageBucket: "watchlist-studio-14978.firebasestorage.app",
@@ -12,205 +10,164 @@ const firebaseConfig = {
   appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
 };
 
-// Initialize Firebase App & Cloud Firestore Database
-if (!firebase.apps.length) {
+// Initialize Firebase App & Cloud Firestore
+if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }
-const db = firebase.firestore();
+const db = (typeof firebase !== 'undefined') ? firebase.firestore() : null;
 
-let cachedWatchlist = [];
+const TMDB_API_KEY = "15d16000751e5057088f1798720994a5";
+const OMDB_API_KEY = "trilogy";
 
-const TMDB_GENRE_MAP = {
-    // Movie genres
-    28: "Action",
-    12: "Adventure",
-    16: "Animation",
-    35: "Comedy",
-    80: "Crime",
-    99: "Documentary",
-    18: "Drama",
-    10751: "Family",
-    14: "Fantasy",
-    36: "History",
-    27: "Horror",
-    10402: "Music",
-    9648: "Mystery",
-    10749: "Romance",
-    878: "Science Fiction",
-    10770: "TV Movie",
-    53: "Thriller",
-    10752: "War",
-    37: "Western",
-    // TV genres
-    10759: "Action & Adventure",
-    10762: "Kids",
-    10763: "News",
-    10764: "Reality",
-    10765: "Sci-Fi & Fantasy",
-    10766: "Soap",
-    10767: "Talk",
-    10768: "War & Politics"
+// TMDB Genre Dictionary
+const TMDB_GENRES = {
+    10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+    99: "Documentary", 18: "Drama", 10751: "Family", 10762: "Kids", 
+    9648: "Mystery", 10763: "News", 10764: "Reality", 10765: "Sci-Fi & Fantasy",
+    10766: "Soap", 10767: "Talk", 10768: "War & Politics", 37: "Western",
+    28: "Action", 12: "Adventure", 14: "Fantasy", 36: "History", 
+    27: "Horror", 10402: "Music", 10749: "Romance", 878: "Sci-Fi", 
+    10770: "TV Movie", 53: "Thriller", 10752: "War"
 };
 
-const LANGUAGE_MAP = {
-    'en': 'English',
-    'hi': 'Hindi',
-    'ko': 'Korean',
-    'ta': 'Tamil',
-    'te': 'Telugu',
-    'ml': 'Malayalam',
-    'kn': 'Kannada',
-    'mr': 'Marathi',
-    'bn': 'Bengali',
-    'pa': 'Punjabi',
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'ja': 'Japanese',
-    'zh': 'Chinese',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ru': 'Russian',
-    'tr': 'Turkish',
-    'ar': 'Arabic'
+// Spoken Language Map
+const LANGUAGE_NAMES = {
+    en: "English", hi: "Hindi", ko: "Korean", ta: "Tamil", te: "Telugu",
+    ml: "Malayalam", kn: "Kannada", es: "Spanish", fr: "French", ja: "Japanese"
 };
 
-function formatLanguage(code) {
-    if (!code) return 'Unknown';
-    const cleanCode = code.toLowerCase().trim();
-    return LANGUAGE_MAP[cleanCode] || cleanCode.toUpperCase();
+let currentWatchlistItems = [];
+
+// ==========================================
+// 2. Lifecycle & Real-Time Firebase Listener
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    setupFirebaseListener();
+    
+    // Add event listeners for dynamic controls if elements exist
+    const primarySelect = document.getElementById('primaryGroupSelect');
+    const secondarySelect = document.getElementById('secondaryGroupSelect');
+    if (primarySelect) primarySelect.addEventListener('change', renderWatchlist);
+    if (secondarySelect) secondarySelect.addEventListener('change', renderWatchlist);
+});
+
+function setupFirebaseListener() {
+    if (db) {
+        db.collection('watchlist').onSnapshot(snapshot => {
+            currentWatchlistItems = [];
+            snapshot.forEach(doc => {
+                currentWatchlistItems.push({ docId: doc.id, ...doc.data() });
+            });
+            populateFilterDropdowns();
+            renderWatchlist();
+        }, err => {
+            console.warn("Firestore listener failed, using local storage fallback:", err);
+            loadLocalFallback();
+        });
+    } else {
+        loadLocalFallback();
+    }
 }
 
-let activeGrouping = 'none';
+function loadLocalFallback() {
+    const stored = localStorage.getItem('myWatchlist');
+    currentWatchlistItems = stored ? JSON.parse(stored) : [];
+    populateFilterDropdowns();
+    renderWatchlist();
+}
 
+function getWatchlist() {
+    return currentWatchlistItems;
+}
+
+// ==========================================
+// 3. Theme Toggle & Mobile Drawer Logic
+// ==========================================
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = savedTheme ? savedTheme === 'dark' : prefersDark;
-
-    if (isDark) {
-        document.documentElement.classList.add('dark');
-    } else {
+    if (savedTheme === 'light') {
         document.documentElement.classList.remove('dark');
+    } else {
+        document.documentElement.classList.add('dark');
     }
-    updateThemeIcon();
 }
 
 function toggleTheme() {
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    updateThemeIcon();
 }
 
-function updateThemeIcon() {
-    const themeIcon = document.getElementById('themeIcon');
-    if (themeIcon) {
-        const isDark = document.documentElement.classList.contains('dark');
-        themeIcon.textContent = isDark ? '🌙' : '☀️';
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initTheme();
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
-    if (themeToggleBtn) {
-        themeToggleBtn.addEventListener('click', toggleTheme);
-    }
-
-    // Restore username if previously saved locally
-    const savedName = localStorage.getItem('watchlist_username');
-    const nameInput = document.getElementById('userName') || document.getElementById('userNameInput');
-    if (savedName && nameInput) {
-        nameInput.value = savedName;
-    }
-    if (nameInput) {
-        nameInput.addEventListener('change', () => {
-            localStorage.setItem('watchlist_username', nameInput.value.trim());
-        });
-    }
-
-    const primarySelect = document.getElementById('primaryGroupSelect');
-    if (primarySelect) {
-        primarySelect.addEventListener('change', renderWatchlist);
-    }
-    const secondarySelect = document.getElementById('secondaryGroupSelect');
-    if (secondarySelect) {
-        secondarySelect.addEventListener('change', renderWatchlist);
-    }
-
-    // Live real-time Firestore sync listener across all devices
-    db.collection('watchlist').onSnapshot((snapshot) => {
-        cachedWatchlist = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                ...data,
-                id: data.id || doc.id,
-                docId: doc.id
-            };
-        });
-        populateFilterDropdowns();
-        renderWatchlist();
-    }, (error) => {
-        console.error("Firestore onSnapshot error:", error);
-    });
-});
-
-function getWatchlist() {
-    return cachedWatchlist;
-}
-
-async function saveWatchlist(watchlist) {
-    // Replaced localStorage with Firestore batch updates
-    try {
-        const batch = db.batch();
-        watchlist.forEach(item => {
-            const docRef = db.collection('watchlist').doc(String(item.id));
-            batch.set(docRef, item, { merge: true });
-        });
-        await batch.commit();
-    } catch (err) {
-        console.error("Error saving watchlist to Firestore:", err);
+function toggleFilterDrawer() {
+    const drawer = document.getElementById('filterDrawer');
+    const btn = document.getElementById('toggleFilterDrawerBtn');
+    
+    if (drawer) {
+        drawer.classList.toggle('hidden');
+        const isHidden = drawer.classList.contains('hidden');
+        if (btn) {
+            btn.innerHTML = isHidden ? '🎛️ Show Filters & Views' : '🎛️ Hide Filters';
+        }
     }
 }
 
-function setGrouping(mode) {
-    activeGrouping = mode;
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`tab-${mode}`).classList.add('active');
-    renderWatchlist();
+function updateFilterBadge() {
+    const filterGenre = document.getElementById('filterGenre')?.value || 'All';
+    const filterPlatform = document.getElementById('filterPlatform')?.value || 'All';
+    const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
+    const filterStatus = document.getElementById('filterStatus')?.value || 'All';
+    const filterType = document.getElementById('filterType')?.value || 'All';
+
+    let activeCount = 0;
+    if (filterGenre !== 'All') activeCount++;
+    if (filterPlatform !== 'All') activeCount++;
+    if (filterLanguage !== 'All') activeCount++;
+    if (filterStatus !== 'All') activeCount++;
+    if (filterType !== 'All') activeCount++;
+
+    const badge = document.getElementById('activeFilterBadge');
+    const btn = document.getElementById('toggleFilterDrawerBtn');
+
+    if (btn) {
+        if (activeCount > 0) {
+            if (!badge) {
+                const newBadge = document.createElement('span');
+                newBadge.id = 'activeFilterBadge';
+                newBadge.className = 'ml-2 bg-sky-500 text-slate-950 px-2 py-0.5 rounded-full text-xs font-bold';
+                newBadge.textContent = activeCount;
+                btn.appendChild(newBadge);
+            } else {
+                badge.textContent = activeCount;
+            }
+        } else if (badge) {
+            badge.remove();
+        }
+    }
 }
 
-function getUserName() {
-    const input = document.getElementById('userName') || document.getElementById('userNameInput');
-    return (input && input.value.trim()) ? input.value.trim() : 'Anonymous';
+// ==========================================
+// 4. API Normalization & Fetching
+// ==========================================
+function normalizePlatformName(name) {
+    if (!name) return 'Not Streaming in IN';
+    const lower = name.toLowerCase();
+    if (lower.includes('amazon prime') || lower.includes('prime video')) return 'Prime Video';
+    if (lower.includes('disney') || lower.includes('hotstar')) return 'Disney+ Hotstar';
+    if (lower.includes('netflix')) return 'Netflix';
+    if (lower.includes('jio')) return 'JioCinema';
+    if (lower.includes('zee5')) return 'Zee5';
+    if (lower.includes('sonyliv')) return 'SonyLIV';
+    return name;
 }
 
 function getPlatformBadgeClass(platform) {
-    if (!platform) return 'badge-default';
+    if (!platform) return 'bg-slate-700';
     const p = platform.toLowerCase();
     if (p.includes('netflix')) return 'badge-netflix';
-    if (p.includes('prime') || p.includes('amazon')) return 'badge-prime';
+    if (p.includes('prime')) return 'badge-prime';
     if (p.includes('hotstar') || p.includes('disney')) return 'badge-hotstar';
     if (p.includes('jio')) return 'badge-jiocinema';
-    return 'badge-default';
-}
-
-function normalizePlatformName(name) {
-    if (!name) return '';
-    const trimmed = name.trim();
-    const lower = trimmed.toLowerCase();
-
-    // Disney / Hotstar variations (e.g., "Disney+ Hotstar", "Hotstar", "Disney Plus", "JioHotstar")
-    if (lower.includes('hotstar') || lower.includes('disney')) {
-        return 'Disney+ Hotstar';
-    }
-
-    // Amazon / Prime Video variations (e.g., "Amazon Prime Video", "Amazon Prime Video with Ads", "Prime Video Channels")
-    if (lower.includes('prime video') || lower.includes('amazon prime') || lower.includes('amazon video') || lower.endsWith('amazon channel')) {
-        return 'Prime Video';
-    }
-
-    return trimmed;
+    return 'bg-slate-700';
 }
 
 function populateFilterDropdowns() {
@@ -218,47 +175,46 @@ function populateFilterDropdowns() {
     
     // Dynamic Genres
     const genreSelect = document.getElementById('filterGenre');
-    const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
-    genreSelect.innerHTML = '<option value="All">All Genres</option>';
-    genres.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g; opt.textContent = g;
-        genreSelect.appendChild(opt);
-    });
-
-    // Dynamic Platforms
-    const platformSelect = document.getElementById('filterPlatform');
-    const allPlatforms = items.flatMap(i => {
-        const rawList = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
-        return rawList.map(p => normalizePlatformName(p));
-    }).filter(Boolean);
-    const uniquePlatforms = [...new Set(allPlatforms)].sort();
-    platformSelect.innerHTML = '<option value="All">All Platforms</option>';
-    uniquePlatforms.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p; opt.textContent = p;
-        platformSelect.appendChild(opt);
-    });
+    if (genreSelect) {
+        const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
+        genreSelect.innerHTML = '<option value="All">All Genres</option>';
+        genres.forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g; opt.textContent = g;
+            genreSelect.appendChild(opt);
+        });
+    }
 
     // Dynamic Languages
-    const languageSelect = document.getElementById('filterLanguage');
-    if (languageSelect) {
+    const langSelect = document.getElementById('filterLanguage');
+    if (langSelect) {
         const languages = [...new Set(items.map(i => i.language).filter(Boolean))].sort();
-        languageSelect.innerHTML = '<option value="All">All Languages</option>';
+        langSelect.innerHTML = '<option value="All">All Languages</option>';
         languages.forEach(l => {
             const opt = document.createElement('option');
             opt.value = l; opt.textContent = l;
-            languageSelect.appendChild(opt);
+            langSelect.appendChild(opt);
+        });
+    }
+
+    // Dynamic Platforms
+    const platformSelect = document.getElementById('filterPlatform');
+    if (platformSelect) {
+        const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
+        const uniquePlatforms = [...new Set(allPlatforms.map(normalizePlatformName))].sort();
+        platformSelect.innerHTML = '<option value="All">All Platforms</option>';
+        uniquePlatforms.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p; opt.textContent = p;
+            platformSelect.appendChild(opt);
         });
     }
 }
 
-// Multi-Tier Search Engine: TMDB (TV/Movie endpoints + IN Watch Providers) with OMDb Fallback
 async function fetchTMDBDetails(queryTitle) {
     const cleanTitle = queryTitle.trim();
 
     try {
-        // 1. Try TMDB TV Show Search First
         let tvRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
         let tvData = await tvRes.json();
         
@@ -269,7 +225,6 @@ async function fetchTMDBDetails(queryTitle) {
             match = tvData.results[0];
             mediaType = 'tv';
         } else {
-            // 2. Try TMDB Movie Search if TV search returned nothing
             let movieRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
             let movieData = await movieRes.json();
             if (movieData.results && movieData.results.length > 0) {
@@ -278,11 +233,18 @@ async function fetchTMDBDetails(queryTitle) {
             }
         }
 
-        // If TMDB found a match, query India Watch Providers (region=IN)
         if (match) {
             const displayTitle = match.title || match.name;
             const releaseYear = (match.release_date || match.first_air_date || '').split('-')[0] || 'N/A';
             const posterUrl = match.poster_path ? `https://image.tmdb.org/t/p/w200${match.poster_path}` : null;
+            const ratingVal = match.vote_average ? match.vote_average.toFixed(1) : 'N/A';
+            const langCode = match.original_language || 'en';
+            const languageName = LANGUAGE_NAMES[langCode] || langCode.toUpperCase();
+
+            let primaryGenre = 'General';
+            if (match.genre_ids && match.genre_ids.length > 0) {
+                primaryGenre = TMDB_GENRES[match.genre_ids[0]] || 'General';
+            }
 
             let indiaPlatforms = [];
             try {
@@ -292,22 +254,14 @@ async function fetchTMDBDetails(queryTitle) {
                 const providerData = await providerRes.json();
                 
                 if (providerData.results && providerData.results.IN && providerData.results.IN.flatrate) {
-                    const normalizedList = providerData.results.IN.flatrate
-                        .map(p => normalizePlatformName(p.provider_name))
-                        .filter(Boolean);
-                    indiaPlatforms = [...new Set(normalizedList)];
+                    const rawPlatforms = providerData.results.IN.flatrate.map(p => p.provider_name);
+                    indiaPlatforms = [...new Set(rawPlatforms.map(normalizePlatformName))];
                 }
             } catch (pErr) {
-                console.warn("Watch provider lookup skipped for IN:", pErr);
+                console.warn("Watch provider lookup skipped:", pErr);
             }
 
             const primaryPlatform = indiaPlatforms.length > 0 ? indiaPlatforms[0] : 'Not Streaming in IN';
-            const firstGenreId = (match.genre_ids && match.genre_ids.length > 0) ? match.genre_ids[0] : null;
-            const resolvedGenre = (firstGenreId && TMDB_GENRE_MAP[firstGenreId]) ? TMDB_GENRE_MAP[firstGenreId] : (mediaType === 'tv' ? 'TV Series' : 'Cinema');
-            const rating = (match.vote_average !== undefined && match.vote_average !== null && match.vote_average > 0) 
-                ? match.vote_average.toFixed(1) 
-                : 'N/A';
-            const language = formatLanguage(match.original_language);
 
             return {
                 valid: true,
@@ -315,67 +269,48 @@ async function fetchTMDBDetails(queryTitle) {
                 type: mediaType,
                 typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
                 year: releaseYear,
-                genre: resolvedGenre,
-                rating: rating,
-                language: language,
+                genre: primaryGenre,
+                rating: ratingVal,
+                language: languageName,
                 platform: primaryPlatform,
                 platforms: indiaPlatforms.length > 0 ? indiaPlatforms : ['Not Streaming in IN'],
                 poster: posterUrl
             };
         }
     } catch (tmdbErr) {
-        console.warn("TMDB Search failed, falling back to OMDb:", tmdbErr);
+        console.warn("TMDB Search failed:", tmdbErr);
     }
 
-    // 3. Fallback to OMDb API if TMDB search misses
-    try {
-        const omdbRes = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(cleanTitle)}`);
-        const omdbData = await omdbRes.json();
-
-        if (omdbData.Response === "True") {
-            const isSeries = omdbData.Type === 'series';
-            const primaryGenre = omdbData.Genre ? omdbData.Genre.split(',')[0].trim() : 'General';
-            const posterUrl = (omdbData.Poster && omdbData.Poster !== "N/A") ? omdbData.Poster : null;
-            const omdbRating = (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') ? omdbData.imdbRating : 'N/A';
-            const omdbLanguage = omdbData.Language ? omdbData.Language.split(',')[0].trim() : 'English';
-
-            return {
-                valid: true,
-                title: omdbData.Title,
-                type: isSeries ? 'tv' : 'movie',
-                typeLabel: isSeries ? '📺 TV Show' : '🎬 Movie',
-                year: omdbData.Year || 'N/A',
-                genre: primaryGenre,
-                rating: omdbRating,
-                language: omdbLanguage,
-                platform: 'Check Local Apps',
-                platforms: ['Check Local Apps'],
-                poster: posterUrl
-            };
-        }
-    } catch (omdbErr) {
-        console.error("OMDb Fallback failed:", omdbErr);
-    }
-
-    return { valid: false, error: `Could not find "${cleanTitle}". Check spelling.` };
+    return { valid: false, error: `Could not find "${cleanTitle}".` };
 }
 
+// ==========================================
+// 5. Intersectional Multi-Filter & Render
+// ==========================================
 function renderWatchlist() {
+    updateFilterBadge();
+
     const container = document.getElementById('watchlistDisplay');
+    if (!container) return;
     
-    const searchQuery = document.getElementById('searchQuery').value.toLowerCase().trim();
-    const filterType = document.getElementById('filterType').value;
-    const filterPlatform = document.getElementById('filterPlatform').value;
-    const filterGenre = document.getElementById('filterGenre').value;
-    const filterLanguage = document.getElementById('filterLanguage') ? document.getElementById('filterLanguage').value : 'All';
-    const filterStatus = document.getElementById('filterStatus').value;
-    const sortBy = document.getElementById('sortBy').value;
+    const searchQuery = document.getElementById('searchQuery')?.value.toLowerCase().trim() || '';
+    const filterType = document.getElementById('filterType')?.value || 'All';
+    const filterPlatform = document.getElementById('filterPlatform')?.value || 'All';
+    const filterGenre = document.getElementById('filterGenre')?.value || 'All';
+    const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
+    const filterStatus = document.getElementById('filterStatus')?.value || 'All';
+    const sortBy = document.getElementById('sortBy')?.value || 'default';
+
+    const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
+    const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
     
     container.innerHTML = '';
-    document.getElementById('selectAll').checked = false;
+    const selectAllCb = document.getElementById('selectAll');
+    if (selectAllCb) selectAllCb.checked = false;
 
     let items = getWatchlist();
 
+    // 1. Multi-Filter Chain
     if (searchQuery !== '') {
         items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
     }
@@ -383,16 +318,13 @@ function renderWatchlist() {
         items = items.filter(i => i.type === filterType);
     }
     if (filterPlatform !== 'All') {
-        items = items.filter(i => {
-            const platforms = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
-            return platforms.map(p => normalizePlatformName(p)).includes(filterPlatform);
-        });
+        items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
     }
     if (filterGenre !== 'All') {
         items = items.filter(i => i.genre === filterGenre);
     }
     if (filterLanguage !== 'All') {
-        items = items.filter(i => (i.language || 'Unknown') === filterLanguage);
+        items = items.filter(i => i.language === filterLanguage);
     }
     if (filterStatus === 'watched') {
         items = items.filter(i => i.watched);
@@ -400,185 +332,143 @@ function renderWatchlist() {
         items = items.filter(i => !i.watched);
     }
 
+    // 2. Sorting
     if (sortBy === 'title-asc') {
         items.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sortBy === 'title-desc') {
         items.sort((a, b) => b.title.localeCompare(a.title));
     } else if (sortBy === 'rating-desc') {
-        items.sort((a, b) => {
-            const rA = (a.rating && a.rating !== 'N/A') ? parseFloat(a.rating) : -1;
-            const rB = (b.rating && b.rating !== 'N/A') ? parseFloat(b.rating) : -1;
-            return rB - rA;
-        });
+        items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
     }
 
     if (items.length === 0) {
-        container.innerHTML = `<div class="empty-state">No matching titles found for the selected filter combination.</div>`;
+        container.innerHTML = `<div class="text-center py-12 text-slate-400 font-medium">No matching titles found.</div>`;
         return;
     }
 
-    // Read Group Builder settings
-    const primarySelect = document.getElementById('primaryGroupSelect');
-    const secondarySelect = document.getElementById('secondaryGroupSelect');
-    const primaryMode = (primarySelect && primarySelect.value !== 'none') ? primarySelect.value : (activeGrouping !== 'none' ? activeGrouping : 'none');
-    const secondaryMode = (secondarySelect && secondarySelect.value !== 'none') ? secondarySelect.value : 'none';
-
-    // Helper: extract grouping keys from an item
-    const getGroupValues = (item, mode) => {
-        if (mode === 'platform') {
-            const plats = (item.platforms && item.platforms.length > 0) ? item.platforms : (item.platform ? [item.platform] : []);
-            const normalized = [...new Set(plats.map(p => normalizePlatformName(p)).filter(Boolean))];
-            return normalized.length > 0 ? normalized : ['Other Platforms'];
-        }
-        if (mode === 'genre') {
-            return [item.genre || 'General'];
-        }
-        if (mode === 'type') {
-            return [item.type === 'tv' ? '📺 TV Shows' : '🎬 Movies'];
-        }
-        if (mode === 'status') {
-            return [item.watched ? '✅ Watched History' : '⏳ To Watch'];
-        }
-        if (mode === 'language') {
-            return [item.language ? `🌐 ${item.language}` : '🌐 Unknown'];
-        }
-        return ['All'];
-    };
-
-    if (primaryMode === 'none') {
+    // 3. Dynamic Grouping Engine
+    if (primaryGroup === 'none') {
         renderGroup(container, 'Filtered Results', items, 'all');
-        return;
+    } else {
+        const primaryGroups = groupItemsBy(items, primaryGroup);
+        
+        Object.keys(primaryGroups).sort().forEach(pKey => {
+            const pItems = primaryGroups[pKey];
+            
+            const groupSection = document.createElement('div');
+            groupSection.className = 'mb-8 bg-slate-900 border border-slate-800 rounded-xl p-4';
+            
+            const groupHeader = document.createElement('h3');
+            groupHeader.className = 'text-lg font-bold text-sky-400 mb-4 flex items-center justify-between border-b border-slate-800 pb-2';
+            groupHeader.innerHTML = `<span>${getGroupTitle(primaryGroup, pKey)}</span> <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full">${pItems.length}</span>`;
+            groupSection.appendChild(groupHeader);
+
+            if (secondaryGroup === 'none' || secondaryGroup === primaryGroup) {
+                renderGroupCards(groupSection, pItems);
+            } else {
+                const secondaryGroups = groupItemsBy(pItems, secondaryGroup);
+                Object.keys(secondaryGroups).sort().forEach(sKey => {
+                    const sItems = secondaryGroups[sKey];
+                    
+                    const subHeader = document.createElement('h4');
+                    subHeader.className = 'text-sm font-semibold text-indigo-300 my-3 pl-2 border-l-2 border-indigo-500';
+                    subHeader.textContent = `${getGroupTitle(secondaryGroup, sKey)} (${sItems.length})`;
+                    groupSection.appendChild(subHeader);
+                    
+                    renderGroupCards(groupSection, sItems);
+                });
+            }
+            container.appendChild(groupSection);
+        });
     }
-
-    // Extract all unique primary group keys
-    const primaryKeys = [...new Set(items.flatMap(i => getGroupValues(i, primaryMode)))].sort();
-
-    primaryKeys.forEach((pKey, pIdx) => {
-        const pItems = items.filter(i => getGroupValues(i, primaryMode).includes(pKey));
-        if (pItems.length === 0) return;
-
-        // If secondary grouping is active and different from primary
-        if (secondaryMode !== 'none' && secondaryMode !== primaryMode) {
-            const pSection = document.createElement('div');
-            pSection.className = 'group-section mb-6';
-            pSection.id = `primary-${pIdx}`;
-
-            const pHeader = document.createElement('div');
-            pHeader.className = 'group-header cursor-pointer select-none flex items-center justify-between p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 hover:border-sky-500/50 transition';
-            pHeader.onclick = () => pSection.classList.toggle('collapsed');
-            pHeader.innerHTML = `
-                <div class="group-title-left flex items-center gap-2.5">
-                    <span class="chevron text-xs text-sky-400">▼</span>
-                    <span class="text-sm font-bold text-sky-400">${pKey}</span>
-                    <span class="group-count text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">${pItems.length}</span>
-                </div>
-            `;
-            pSection.appendChild(pHeader);
-
-            const pContainer = document.createElement('div');
-            pContainer.className = 'card-grid-container space-y-4 pl-2 sm:pl-4 border-l-2 border-slate-800/80 ml-2';
-
-            const secondaryKeys = [...new Set(pItems.flatMap(i => getGroupValues(i, secondaryMode)))].sort();
-            secondaryKeys.forEach((sKey, sIdx) => {
-                const sItems = pItems.filter(i => getGroupValues(i, secondaryMode).includes(sKey));
-                if (sItems.length > 0) {
-                    renderGroup(pContainer, `${pKey} › ${sKey}`, sItems, `${pIdx}-${sIdx}`, true);
-                }
-            });
-
-            pSection.appendChild(pContainer);
-            container.appendChild(pSection);
-        } else {
-            renderGroup(container, pKey, pItems, `p-${pIdx}`);
-        }
-    });
 }
 
-function renderGroup(parentContainer, groupTitle, items, groupKey, isSubgroup = false) {
-    const section = document.createElement('div');
-    section.className = isSubgroup ? 'group-section subgroup-section mb-4' : 'group-section mb-6';
-    section.id = `group-${groupKey}`;
+function groupItemsBy(items, criteria) {
+    const groups = {};
+    items.forEach(item => {
+        let val = 'Other';
+        if (criteria === 'platform') val = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
+        else if (criteria === 'genre') val = item.genre || 'General';
+        else if (criteria === 'language') val = item.language || 'English';
+        else if (criteria === 'type') val = item.typeLabel || 'Movie';
+        else if (criteria === 'status') val = item.watched ? 'Watched' : 'To Watch';
+        
+        if (!groups[val]) groups[val] = [];
+        groups[val].push(item);
+    });
+    return groups;
+}
 
-    const titleHeader = document.createElement('div');
-    titleHeader.className = isSubgroup
-        ? 'group-header cursor-pointer select-none flex items-center justify-between p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg mb-2.5 hover:border-sky-400/40 transition'
-        : 'group-header cursor-pointer select-none flex items-center justify-between p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 hover:border-sky-500/50 transition';
-    titleHeader.onclick = () => section.classList.toggle('collapsed');
-    
-    titleHeader.innerHTML = `
-        <div class="group-title-left flex items-center gap-2.5">
-            <span class="chevron text-xs ${isSubgroup ? 'text-indigo-400' : 'text-sky-400'}">▼</span>
-            <span class="${isSubgroup ? 'text-xs font-semibold text-slate-300' : 'text-sm font-bold text-sky-400'}">${groupTitle}</span>
-            <span class="group-count text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">${items.length}</span>
-        </div>
-    `;
+function getGroupTitle(criteria, val) {
+    return `${criteria.toUpperCase()}: ${val}`;
+}
+
+function renderGroup(parentContainer, groupTitle, items, groupKey) {
+    const section = document.createElement('div');
+    section.className = 'mb-6';
+
+    const titleHeader = document.createElement('h3');
+    titleHeader.className = 'text-base font-bold text-sky-400 mb-3 flex items-center justify-between bg-slate-900 px-4 py-2 rounded-lg border border-slate-800';
+    titleHeader.innerHTML = `<span>${groupTitle}</span> <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">${items.length}</span>`;
     section.appendChild(titleHeader);
 
+    renderGroupCards(section, items);
+    parentContainer.appendChild(section);
+}
+
+function renderGroupCards(parentContainer, items) {
     const grid = document.createElement('div');
-    grid.className = 'card-grid';
+    grid.className = 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 my-2';
 
     items.forEach(item => {
         const card = document.createElement('div');
-        card.className = `movie-card ${item.watched ? 'watched' : ''}`;
+        card.className = `movie-card bg-slate-800 border border-slate-700/60 rounded-xl overflow-hidden flex flex-col justify-between transition-all hover:-translate-y-1 hover:border-sky-400 hover:shadow-lg ${item.watched ? 'opacity-50' : ''}`;
         
-        const rawPlatform = (item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform;
-        const mainPlatform = normalizePlatformName(rawPlatform);
+        const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
 
         const posterHtml = item.poster 
-            ? `<img src="${item.poster}" class="poster-img" alt="${item.title}">` 
-            : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:20px;">🎬</div>`;
-
-        const ratingBadge = (item.rating && item.rating !== 'N/A')
-            ? `<div class="absolute top-1.5 right-1.5 bg-slate-950/90 text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/40 shadow-[0_0_10px_rgba(250,204,21,0.45)] backdrop-blur-sm flex items-center gap-1 z-10">
-                <span>⭐</span><span>${item.rating}</span>
-               </div>`
-            : '';
-
-        const languageBadge = item.language
-            ? `<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 rounded">🌐 ${item.language}</span>`
-            : '';
+            ? `<img src="${item.poster}" class="w-full h-44 object-cover" alt="${item.title}">` 
+            : `<div class="w-full h-44 bg-slate-900 flex items-center justify-center text-3xl">🎬</div>`;
 
         card.innerHTML = `
-            <div class="poster-box relative">
+            <div class="relative">
                 ${posterHtml}
-                ${ratingBadge}
+                <span class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full text-white uppercase shadow-md ${badgeClass}">${mainPlatform}</span>
+                <span class="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold rounded bg-slate-900/80 text-amber-300 backdrop-blur-sm">⭐ ${item.rating || 'N/A'}</span>
             </div>
-            <div class="card-body">
+            <div class="p-3 flex-1 flex flex-col justify-between">
                 <div>
-                    <div class="card-header">
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <input type="checkbox" class="item-checkbox" data-id="${item.id}">
-                            <div class="card-title">${item.title}</div>
-                        </div>
-                        <span class="badge ${badgeClass}">${mainPlatform}</span>
+                    <div class="flex items-start gap-2 mb-1">
+                        <input type="checkbox" class="item-checkbox mt-1 rounded border-slate-600" data-id="${item.docId || item.id}">
+                        <h4 class="font-bold text-sm text-slate-100 leading-snug line-clamp-2">${item.title}</h4>
                     </div>
-                    <div class="card-meta">
-                        <span class="type-badge">${item.typeLabel || '🎬 Movie'}</span>
-                        ${item.genre ? `<span class="type-badge">${item.genre}</span>` : ''}
-                        ${languageBadge}
-                        <span>Release: <strong>${item.year}</strong></span>
-                        ${item.addedBy ? `<span style="margin-left: 6px; color: var(--accent-blue);">👤 ${item.addedBy}</span>` : ''}
+                    <div class="text-xs text-slate-400 space-x-2 mt-1">
+                        <span>🌐 ${item.language || 'EN'}</span>
+                        <span>🗓️ ${item.year || 'N/A'}</span>
                     </div>
                 </div>
-                <div class="card-footer">
-                    <button class="tab-btn btn-small" onclick="toggleWatched(${item.id})">
+                <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-700/50 text-xs">
+                    <button class="text-emerald-400 hover:text-emerald-300 font-semibold" onclick="toggleWatched('${item.docId || item.id}')">
                         ${item.watched ? '↩️ Unwatch' : '✓ Watched'}
                     </button>
-                    <button class="btn-danger btn-small" onclick="deleteItem(${item.id})">Delete</button>
+                    <button class="text-rose-400 hover:text-rose-300 font-semibold" onclick="deleteItem('${item.docId || item.id}')">Delete</button>
                 </div>
             </div>
         `;
         grid.appendChild(card);
     });
 
-    section.appendChild(grid);
-    parentContainer.appendChild(section);
+    parentContainer.appendChild(grid);
 }
 
+// ==========================================
+// 6. Data Mutations (Add / Delete / Watched)
+// ==========================================
 async function addItem() {
     const titleInput = document.getElementById('title');
-    const rawTitle = titleInput.value.trim();
+    const userNameInput = document.getElementById('userName');
+    const rawTitle = titleInput ? titleInput.value.trim() : '';
 
     if (rawTitle === '') {
         alert('Please enter a title!');
@@ -592,8 +482,6 @@ async function addItem() {
         return;
     }
 
-    const addedBy = getUserName();
-
     const newItem = {
         id: Date.now(),
         title: apiResult.title,
@@ -602,129 +490,90 @@ async function addItem() {
         platform: apiResult.platform,
         platforms: apiResult.platforms,
         genre: apiResult.genre,
-        rating: apiResult.rating || 'N/A',
-        language: apiResult.language || 'English',
+        rating: apiResult.rating,
+        language: apiResult.language,
         year: apiResult.year,
         poster: apiResult.poster,
         watched: false,
-        addedBy: addedBy
+        addedBy: userNameInput ? userNameInput.value : 'Guest'
     };
 
-    try {
-        await db.collection('watchlist').doc(String(newItem.id)).set(newItem);
-        titleInput.value = '';
-    } catch (err) {
-        console.error("Error adding item to Firestore:", err);
-        alert("Failed to save item to Firestore. Check console/Firebase config.");
+    if (db) {
+        await db.collection('watchlist').add(newItem);
+    } else {
+        const items = getWatchlist();
+        items.push(newItem);
+        localStorage.setItem('myWatchlist', JSON.stringify(items));
+        loadLocalFallback();
     }
+
+    if (titleInput) titleInput.value = '';
 }
 
 async function bulkUpload() {
-    const bulkText = document.getElementById('bulkTitles').value;
+    const bulkText = document.getElementById('bulkTitles')?.value || '';
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l !== '');
 
-    if (bulkText.trim() === '') {
+    if (lines.length === 0) {
         alert('Please paste at least one title!');
         return;
     }
 
-    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l !== '');
-    if (lines.length === 0) {
-        alert('Please paste at least one valid title!');
-        return;
-    }
-
-    const progressContainer = document.getElementById('bulkProgressContainer');
-    const progressStatus = document.getElementById('bulkProgressStatus');
-    const progressBar = document.getElementById('bulkProgressBar');
-    const bulkButton = document.getElementById('btnBulkUpload') || document.querySelector('button[onclick="bulkUpload()"]');
-
-    if (progressContainer) progressContainer.style.display = 'block';
-    if (bulkButton) bulkButton.disabled = true;
-
-    const addedBy = getUserName();
-
-    let addedCount = 0;
-    let failedTitles = [];
-    const itemsToAdd = [];
-
-    try {
-        for (let index = 0; index < lines.length; index++) {
-            const title = lines[index];
-            const currentStep = index + 1;
-            const percent = Math.round((currentStep / lines.length) * 100);
-
-            if (progressStatus) {
-                progressStatus.textContent = `Processing ${currentStep} / ${lines.length}: "${title}"...`;
-            }
-            if (progressBar) {
-                progressBar.style.width = `${percent}%`;
-            }
-
-            const apiResult = await fetchTMDBDetails(title);
-            if (apiResult.valid) {
-                itemsToAdd.push({
-                    id: Date.now() + index,
-                    title: apiResult.title,
-                    type: apiResult.type,
-                    typeLabel: apiResult.typeLabel,
-                    platform: apiResult.platform,
-                    platforms: apiResult.platforms,
-                    genre: apiResult.genre,
-                    rating: apiResult.rating || 'N/A',
-                    language: apiResult.language || 'English',
-                    year: apiResult.year,
-                    poster: apiResult.poster,
-                    watched: false,
-                    addedBy: addedBy
-                });
-                addedCount++;
+    for (let i = 0; i < lines.length; i++) {
+        const apiResult = await fetchTMDBDetails(lines[i]);
+        if (apiResult.valid) {
+            const newItem = {
+                id: Date.now() + i,
+                title: apiResult.title,
+                type: apiResult.type,
+                typeLabel: apiResult.typeLabel,
+                platform: apiResult.platform,
+                platforms: apiResult.platforms,
+                genre: apiResult.genre,
+                rating: apiResult.rating,
+                language: apiResult.language,
+                year: apiResult.year,
+                poster: apiResult.poster,
+                watched: false
+            };
+            if (db) {
+                await db.collection('watchlist').add(newItem);
             } else {
-                failedTitles.push(title);
+                currentWatchlistItems.push(newItem);
             }
         }
-
-        if (itemsToAdd.length > 0) {
-            const batch = db.batch();
-            itemsToAdd.forEach(item => {
-                const docRef = db.collection('watchlist').doc(String(item.id));
-                batch.set(docRef, item);
-            });
-            await batch.commit();
-            document.getElementById('bulkTitles').value = '';
-        }
-    } catch (err) {
-        console.error("Error bulk uploading items to Firestore:", err);
-    } finally {
-        if (progressContainer) progressContainer.style.display = 'none';
-        if (progressBar) progressBar.style.width = '0%';
-        if (progressStatus) progressStatus.textContent = 'Ready';
-        if (bulkButton) bulkButton.disabled = false;
     }
 
-    let msg = `Added ${addedCount} titles successfully!`;
-    if (failedTitles.length > 0) {
-        msg += `\n\n⚠️ Could not find ${failedTitles.length} title(s):\n- ` + failedTitles.join('\n- ');
+    if (!db) {
+        localStorage.setItem('myWatchlist', JSON.stringify(currentWatchlistItems));
+        loadLocalFallback();
     }
-    alert(msg);
+
+    if (document.getElementById('bulkTitles')) document.getElementById('bulkTitles').value = '';
 }
 
 async function toggleWatched(id) {
-    const item = cachedWatchlist.find(i => String(i.id) === String(id));
-    if (!item) return;
-    try {
-        await db.collection('watchlist').doc(String(item.id)).update({
-            watched: !item.watched
-        });
-    } catch (err) {
-        console.error("Error updating watched status in Firestore:", err);
+    if (db && typeof id === 'string' && id.length > 10) {
+        const docRef = db.collection('watchlist').doc(id);
+        const doc = await docRef.get();
+        if (doc.exists) {
+            await docRef.update({ watched: !doc.data().watched });
+        }
+    } else {
+        let items = getWatchlist();
+        items = items.map(item => (item.id == id || item.docId == id) ? { ...item, watched: !item.watched } : item);
+        localStorage.setItem('myWatchlist', JSON.stringify(items));
+        loadLocalFallback();
     }
 }
 
 async function deleteItem(id) {
-    try {
-        await db.collection('watchlist').doc(String(id)).delete();
-    } catch (err) {
-        console.error("Error deleting item from Firestore:", err);
+    if (db && typeof id === 'string' && id.length > 10) {
+        await db.collection('watchlist').doc(id).delete();
+    } else {
+        let items = getWatchlist().filter(item => item.id != id && item.docId != id);
+        localStorage.setItem('myWatchlist', JSON.stringify(items));
+        loadLocalFallback();
     }
 }
 
@@ -740,31 +589,20 @@ async function deleteSelectedItems() {
     }
 
     if (confirm(`Delete ${checkboxes.length} selected item(s)?`)) {
-        const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.id);
-        try {
-            const batch = db.batch();
-            selectedIds.forEach(id => {
-                const docRef = db.collection('watchlist').doc(String(id));
-                batch.delete(docRef);
-            });
-            await batch.commit();
-        } catch (err) {
-            console.error("Error batch deleting items from Firestore:", err);
+        for (let cb of checkboxes) {
+            await deleteItem(cb.dataset.id);
         }
     }
 }
 
 async function clearAllItems() {
     if (confirm('Delete your entire watchlist?')) {
-        try {
-            const batch = db.batch();
-            cachedWatchlist.forEach(item => {
-                const docRef = db.collection('watchlist').doc(String(item.id));
-                batch.delete(docRef);
-            });
-            await batch.commit();
-        } catch (err) {
-            console.error("Error clearing watchlist from Firestore:", err);
+        if (db) {
+            const snapshot = await db.collection('watchlist').get();
+            snapshot.forEach(doc => doc.ref.delete());
+        } else {
+            localStorage.removeItem('myWatchlist');
+            loadLocalFallback();
         }
     }
 }
