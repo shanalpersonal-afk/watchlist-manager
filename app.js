@@ -52,9 +52,71 @@ const TMDB_GENRE_MAP = {
     10768: "War & Politics"
 };
 
+const LANGUAGE_MAP = {
+    'en': 'English',
+    'hi': 'Hindi',
+    'ko': 'Korean',
+    'ta': 'Tamil',
+    'te': 'Telugu',
+    'ml': 'Malayalam',
+    'kn': 'Kannada',
+    'mr': 'Marathi',
+    'bn': 'Bengali',
+    'pa': 'Punjabi',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'ja': 'Japanese',
+    'zh': 'Chinese',
+    'it': 'Italian',
+    'pt': 'Portuguese',
+    'ru': 'Russian',
+    'tr': 'Turkish',
+    'ar': 'Arabic'
+};
+
+function formatLanguage(code) {
+    if (!code) return 'Unknown';
+    const cleanCode = code.toLowerCase().trim();
+    return LANGUAGE_MAP[cleanCode] || cleanCode.toUpperCase();
+}
+
 let activeGrouping = 'none';
 
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = savedTheme ? savedTheme === 'dark' : prefersDark;
+
+    if (isDark) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+    updateThemeIcon();
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateThemeIcon();
+}
+
+function updateThemeIcon() {
+    const themeIcon = document.getElementById('themeIcon');
+    if (themeIcon) {
+        const isDark = document.documentElement.classList.contains('dark');
+        themeIcon.textContent = isDark ? '🌙' : '☀️';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', toggleTheme);
+    }
+
     // Restore username if previously saved locally
     const savedName = localStorage.getItem('watchlist_username');
     const nameInput = document.getElementById('userName') || document.getElementById('userNameInput');
@@ -65,6 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
         nameInput.addEventListener('change', () => {
             localStorage.setItem('watchlist_username', nameInput.value.trim());
         });
+    }
+
+    const primarySelect = document.getElementById('primaryGroupSelect');
+    if (primarySelect) {
+        primarySelect.addEventListener('change', renderWatchlist);
+    }
+    const secondarySelect = document.getElementById('secondaryGroupSelect');
+    if (secondarySelect) {
+        secondarySelect.addEventListener('change', renderWatchlist);
     }
 
     // Live real-time Firestore sync listener across all devices
@@ -168,6 +239,18 @@ function populateFilterDropdowns() {
         opt.value = p; opt.textContent = p;
         platformSelect.appendChild(opt);
     });
+
+    // Dynamic Languages
+    const languageSelect = document.getElementById('filterLanguage');
+    if (languageSelect) {
+        const languages = [...new Set(items.map(i => i.language).filter(Boolean))].sort();
+        languageSelect.innerHTML = '<option value="All">All Languages</option>';
+        languages.forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l; opt.textContent = l;
+            languageSelect.appendChild(opt);
+        });
+    }
 }
 
 // Multi-Tier Search Engine: TMDB (TV/Movie endpoints + IN Watch Providers) with OMDb Fallback
@@ -221,6 +304,10 @@ async function fetchTMDBDetails(queryTitle) {
             const primaryPlatform = indiaPlatforms.length > 0 ? indiaPlatforms[0] : 'Not Streaming in IN';
             const firstGenreId = (match.genre_ids && match.genre_ids.length > 0) ? match.genre_ids[0] : null;
             const resolvedGenre = (firstGenreId && TMDB_GENRE_MAP[firstGenreId]) ? TMDB_GENRE_MAP[firstGenreId] : (mediaType === 'tv' ? 'TV Series' : 'Cinema');
+            const rating = (match.vote_average !== undefined && match.vote_average !== null && match.vote_average > 0) 
+                ? match.vote_average.toFixed(1) 
+                : 'N/A';
+            const language = formatLanguage(match.original_language);
 
             return {
                 valid: true,
@@ -229,6 +316,8 @@ async function fetchTMDBDetails(queryTitle) {
                 typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
                 year: releaseYear,
                 genre: resolvedGenre,
+                rating: rating,
+                language: language,
                 platform: primaryPlatform,
                 platforms: indiaPlatforms.length > 0 ? indiaPlatforms : ['Not Streaming in IN'],
                 poster: posterUrl
@@ -247,6 +336,8 @@ async function fetchTMDBDetails(queryTitle) {
             const isSeries = omdbData.Type === 'series';
             const primaryGenre = omdbData.Genre ? omdbData.Genre.split(',')[0].trim() : 'General';
             const posterUrl = (omdbData.Poster && omdbData.Poster !== "N/A") ? omdbData.Poster : null;
+            const omdbRating = (omdbData.imdbRating && omdbData.imdbRating !== 'N/A') ? omdbData.imdbRating : 'N/A';
+            const omdbLanguage = omdbData.Language ? omdbData.Language.split(',')[0].trim() : 'English';
 
             return {
                 valid: true,
@@ -255,6 +346,8 @@ async function fetchTMDBDetails(queryTitle) {
                 typeLabel: isSeries ? '📺 TV Show' : '🎬 Movie',
                 year: omdbData.Year || 'N/A',
                 genre: primaryGenre,
+                rating: omdbRating,
+                language: omdbLanguage,
                 platform: 'Check Local Apps',
                 platforms: ['Check Local Apps'],
                 poster: posterUrl
@@ -274,6 +367,7 @@ function renderWatchlist() {
     const filterType = document.getElementById('filterType').value;
     const filterPlatform = document.getElementById('filterPlatform').value;
     const filterGenre = document.getElementById('filterGenre').value;
+    const filterLanguage = document.getElementById('filterLanguage') ? document.getElementById('filterLanguage').value : 'All';
     const filterStatus = document.getElementById('filterStatus').value;
     const sortBy = document.getElementById('sortBy').value;
     
@@ -297,6 +391,9 @@ function renderWatchlist() {
     if (filterGenre !== 'All') {
         items = items.filter(i => i.genre === filterGenre);
     }
+    if (filterLanguage !== 'All') {
+        items = items.filter(i => (i.language || 'Unknown') === filterLanguage);
+    }
     if (filterStatus === 'watched') {
         items = items.filter(i => i.watched);
     } else if (filterStatus === 'towatch') {
@@ -307,6 +404,12 @@ function renderWatchlist() {
         items.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sortBy === 'title-desc') {
         items.sort((a, b) => b.title.localeCompare(a.title));
+    } else if (sortBy === 'rating-desc') {
+        items.sort((a, b) => {
+            const rA = (a.rating && a.rating !== 'N/A') ? parseFloat(a.rating) : -1;
+            const rB = (b.rating && b.rating !== 'N/A') ? parseFloat(b.rating) : -1;
+            return rB - rA;
+        });
     }
 
     if (items.length === 0) {
@@ -314,52 +417,99 @@ function renderWatchlist() {
         return;
     }
 
-    if (activeGrouping === 'none') {
+    // Read Group Builder settings
+    const primarySelect = document.getElementById('primaryGroupSelect');
+    const secondarySelect = document.getElementById('secondaryGroupSelect');
+    const primaryMode = (primarySelect && primarySelect.value !== 'none') ? primarySelect.value : (activeGrouping !== 'none' ? activeGrouping : 'none');
+    const secondaryMode = (secondarySelect && secondarySelect.value !== 'none') ? secondarySelect.value : 'none';
+
+    // Helper: extract grouping keys from an item
+    const getGroupValues = (item, mode) => {
+        if (mode === 'platform') {
+            const plats = (item.platforms && item.platforms.length > 0) ? item.platforms : (item.platform ? [item.platform] : []);
+            const normalized = [...new Set(plats.map(p => normalizePlatformName(p)).filter(Boolean))];
+            return normalized.length > 0 ? normalized : ['Other Platforms'];
+        }
+        if (mode === 'genre') {
+            return [item.genre || 'General'];
+        }
+        if (mode === 'type') {
+            return [item.type === 'tv' ? '📺 TV Shows' : '🎬 Movies'];
+        }
+        if (mode === 'status') {
+            return [item.watched ? '✅ Watched History' : '⏳ To Watch'];
+        }
+        if (mode === 'language') {
+            return [item.language ? `🌐 ${item.language}` : '🌐 Unknown'];
+        }
+        return ['All'];
+    };
+
+    if (primaryMode === 'none') {
         renderGroup(container, 'Filtered Results', items, 'all');
-    } else if (activeGrouping === 'type') {
-        const movies = items.filter(i => i.type === 'movie');
-        const series = items.filter(i => i.type === 'tv');
-        if (movies.length > 0) renderGroup(container, '🎬 Movies', movies, 'movies');
-        if (series.length > 0) renderGroup(container, '📺 TV Shows', series, 'series');
-    } else if (activeGrouping === 'platform') {
-        const allPlatforms = items.flatMap(i => {
-            const raw = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
-            return raw.map(p => normalizePlatformName(p));
-        }).filter(Boolean);
-        const platforms = [...new Set(allPlatforms)].sort();
-        platforms.forEach(platform => {
-            const groupItems = items.filter(i => {
-                const itemPlatforms = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
-                return itemPlatforms.map(p => normalizePlatformName(p)).includes(platform);
-            });
-            if (groupItems.length > 0) {
-                renderGroup(container, platform, groupItems, platform);
-            }
-        });
-    } else if (activeGrouping === 'status') {
-        const toWatch = items.filter(i => !i.watched);
-        const watched = items.filter(i => i.watched);
-        if (toWatch.length > 0) renderGroup(container, '⏳ To Watch', toWatch, 'towatch');
-        if (watched.length > 0) renderGroup(container, '✅ Watched History', watched, 'watched');
-    } else {
-        renderGroup(container, 'All Titles', items, 'all');
+        return;
     }
+
+    // Extract all unique primary group keys
+    const primaryKeys = [...new Set(items.flatMap(i => getGroupValues(i, primaryMode)))].sort();
+
+    primaryKeys.forEach((pKey, pIdx) => {
+        const pItems = items.filter(i => getGroupValues(i, primaryMode).includes(pKey));
+        if (pItems.length === 0) return;
+
+        // If secondary grouping is active and different from primary
+        if (secondaryMode !== 'none' && secondaryMode !== primaryMode) {
+            const pSection = document.createElement('div');
+            pSection.className = 'group-section mb-6';
+            pSection.id = `primary-${pIdx}`;
+
+            const pHeader = document.createElement('div');
+            pHeader.className = 'group-header cursor-pointer select-none flex items-center justify-between p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 hover:border-sky-500/50 transition';
+            pHeader.onclick = () => pSection.classList.toggle('collapsed');
+            pHeader.innerHTML = `
+                <div class="group-title-left flex items-center gap-2.5">
+                    <span class="chevron text-xs text-sky-400">▼</span>
+                    <span class="text-sm font-bold text-sky-400">${pKey}</span>
+                    <span class="group-count text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">${pItems.length}</span>
+                </div>
+            `;
+            pSection.appendChild(pHeader);
+
+            const pContainer = document.createElement('div');
+            pContainer.className = 'card-grid-container space-y-4 pl-2 sm:pl-4 border-l-2 border-slate-800/80 ml-2';
+
+            const secondaryKeys = [...new Set(pItems.flatMap(i => getGroupValues(i, secondaryMode)))].sort();
+            secondaryKeys.forEach((sKey, sIdx) => {
+                const sItems = pItems.filter(i => getGroupValues(i, secondaryMode).includes(sKey));
+                if (sItems.length > 0) {
+                    renderGroup(pContainer, `${pKey} › ${sKey}`, sItems, `${pIdx}-${sIdx}`, true);
+                }
+            });
+
+            pSection.appendChild(pContainer);
+            container.appendChild(pSection);
+        } else {
+            renderGroup(container, pKey, pItems, `p-${pIdx}`);
+        }
+    });
 }
 
-function renderGroup(parentContainer, groupTitle, items, groupKey) {
+function renderGroup(parentContainer, groupTitle, items, groupKey, isSubgroup = false) {
     const section = document.createElement('div');
-    section.className = 'group-section';
+    section.className = isSubgroup ? 'group-section subgroup-section mb-4' : 'group-section mb-6';
     section.id = `group-${groupKey}`;
 
     const titleHeader = document.createElement('div');
-    titleHeader.className = 'group-header';
+    titleHeader.className = isSubgroup
+        ? 'group-header cursor-pointer select-none flex items-center justify-between p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg mb-2.5 hover:border-sky-400/40 transition'
+        : 'group-header cursor-pointer select-none flex items-center justify-between p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 hover:border-sky-500/50 transition';
     titleHeader.onclick = () => section.classList.toggle('collapsed');
     
     titleHeader.innerHTML = `
-        <div class="group-title-left">
-            <span class="chevron">▼</span>
-            <span>${groupTitle}</span>
-            <span class="group-count">${items.length}</span>
+        <div class="group-title-left flex items-center gap-2.5">
+            <span class="chevron text-xs ${isSubgroup ? 'text-indigo-400' : 'text-sky-400'}">▼</span>
+            <span class="${isSubgroup ? 'text-xs font-semibold text-slate-300' : 'text-sm font-bold text-sky-400'}">${groupTitle}</span>
+            <span class="group-count text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">${items.length}</span>
         </div>
     `;
     section.appendChild(titleHeader);
@@ -379,9 +529,20 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
             ? `<img src="${item.poster}" class="poster-img" alt="${item.title}">` 
             : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:20px;">🎬</div>`;
 
+        const ratingBadge = (item.rating && item.rating !== 'N/A')
+            ? `<div class="absolute top-1.5 right-1.5 bg-slate-950/90 text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-md border border-yellow-400/40 shadow-[0_0_10px_rgba(250,204,21,0.45)] backdrop-blur-sm flex items-center gap-1 z-10">
+                <span>⭐</span><span>${item.rating}</span>
+               </div>`
+            : '';
+
+        const languageBadge = item.language
+            ? `<span class="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 rounded">🌐 ${item.language}</span>`
+            : '';
+
         card.innerHTML = `
-            <div class="poster-box">
+            <div class="poster-box relative">
                 ${posterHtml}
+                ${ratingBadge}
             </div>
             <div class="card-body">
                 <div>
@@ -395,6 +556,7 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
                     <div class="card-meta">
                         <span class="type-badge">${item.typeLabel || '🎬 Movie'}</span>
                         ${item.genre ? `<span class="type-badge">${item.genre}</span>` : ''}
+                        ${languageBadge}
                         <span>Release: <strong>${item.year}</strong></span>
                         ${item.addedBy ? `<span style="margin-left: 6px; color: var(--accent-blue);">👤 ${item.addedBy}</span>` : ''}
                     </div>
@@ -440,6 +602,8 @@ async function addItem() {
         platform: apiResult.platform,
         platforms: apiResult.platforms,
         genre: apiResult.genre,
+        rating: apiResult.rating || 'N/A',
+        language: apiResult.language || 'English',
         year: apiResult.year,
         poster: apiResult.poster,
         watched: false,
@@ -506,6 +670,8 @@ async function bulkUpload() {
                     platform: apiResult.platform,
                     platforms: apiResult.platforms,
                     genre: apiResult.genre,
+                    rating: apiResult.rating || 'N/A',
+                    language: apiResult.language || 'English',
                     year: apiResult.year,
                     poster: apiResult.poster,
                     watched: false,
