@@ -45,7 +45,18 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupFirebaseListener();
     
-    // Add event listeners for dynamic controls if elements exist
+    // Attach Google Authentication Button Listeners
+    const googleBtn = document.getElementById('googleSignInBtn');
+    if (googleBtn) {
+        googleBtn.addEventListener('click', loginWithGoogle);
+    }
+
+    const signOutBtn = document.getElementById('signOutBtn');
+    if (signOutBtn) {
+        signOutBtn.addEventListener('click', logoutUser);
+    }
+
+    // Add event listeners for dynamic group controls if elements exist
     const primarySelect = document.getElementById('primaryGroupSelect');
     const secondarySelect = document.getElementById('secondaryGroupSelect');
     if (primarySelect) primarySelect.addEventListener('change', renderWatchlist);
@@ -79,6 +90,34 @@ function loadLocalFallback() {
 
 function getWatchlist() {
     return currentWatchlistItems;
+}
+
+// ==========================================
+// Google Authentication Handlers
+// ==========================================
+function loginWithGoogle() {
+    if (typeof firebase === 'undefined' || !firebase.auth) {
+        alert("Firebase Auth SDK is missing or not loaded.");
+        return;
+    }
+
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider)
+        .then((result) => {
+            console.log("Logged in successfully:", result.user.displayName);
+        })
+        .catch((error) => {
+            console.error("Google Auth Error:", error);
+            alert(`Auth Error: ${error.message}`);
+        });
+}
+
+function logoutUser() {
+    if (typeof firebase !== 'undefined' && firebase.auth) {
+        firebase.auth().signOut().then(() => {
+            console.log("User signed out.");
+        });
+    }
 }
 
 // ==========================================
