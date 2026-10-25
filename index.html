@@ -3,483 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio - v2.6.0</title>
-    <!-- Tailwind CSS CDN with dark mode configured via 'class' -->
+    <title>Watchlist Studio v2.6.0</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        slate: {
-                            950: '#0b1120'
-                        }
-                    }
-                }
-            }
+            darkMode: 'class'
         }
     </script>
-    <!-- Firebase SDKs (Browser Compat Version) -->
-    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <!-- Custom CSS for Platform Badges -->
+    <style>
+        .badge-netflix { background-color: #ef4444; }
+        .badge-prime { background-color: #0284c7; }
+        .badge-hotstar { background-color: #0d9488; }
+        .badge-jiocinema { background-color: #ec4899; }
+    </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased transition-colors duration-200">
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
 
-    <!-- Splash Cover Screen (shown by default when logged out) -->
-    <div id="splashScreen" class="min-h-screen flex items-center justify-center px-4 py-12">
-        <div class="max-w-xl w-full bg-slate-900/80 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl backdrop-blur-md text-center space-y-8">
-            <div class="space-y-3">
-                <span class="text-4xl">🍿</span>
-                <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-400 to-cyan-300 bg-clip-text text-transparent">
-                    Watchlist Studio
-                </h1>
-                <p class="text-lg font-semibold text-slate-200">Your Centralized Media Dashboard</p>
-                <p class="text-xs text-slate-400 max-w-md mx-auto">
-                    Track titles across OTT networks, auto-detect streaming availability in India, and collaborate with live sync.
-                </p>
-            </div>
+    <!-- Splash Cover Screen (Logged Out View) -->
+    <div id="splashScreen" class="flex flex-col items-center justify-center min-h-[80vh] text-center">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md w-full shadow-2xl">
+            <div class="text-5xl mb-4">🍿</div>
+            <h1 class="text-3xl font-extrabold text-sky-400 mb-2">Watchlist Studio</h1>
+            <p class="text-slate-400 text-sm mb-6">Your Centralized Media Dashboard</p>
+            
+            <ul class="text-left text-xs text-slate-300 space-y-3 mb-8 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Track India Streaming (IN)</li>
+                <li class="flex items-center gap-2"><span class="text-amber-400">⭐</span> Fetch Ratings & Posters</li>
+                <li class="flex items-center gap-2"><span class="text-indigo-400">📦</span> Group by Genre/Language</li>
+                <li class="flex items-center gap-2"><span class="text-sky-400">⚡</span> Live Multi-Device Sync</li>
+            </ul>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-                    <span class="text-emerald-400 text-sm">✓</span>
-                    <span class="text-xs font-medium text-slate-300">Track India Streaming (IN)</span>
-                </div>
-                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-                    <span class="text-yellow-400 text-sm">★</span>
-                    <span class="text-xs font-medium text-slate-300">Fetch Ratings & Posters</span>
-                </div>
-                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-                    <span class="text-sky-400 text-sm">🗂️</span>
-                    <span class="text-xs font-medium text-slate-300">Group by Genre/Language</span>
-                </div>
-                <div class="flex items-center gap-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl px-3.5 py-2.5">
-                    <span class="text-indigo-400 text-sm">⚡</span>
-                    <span class="text-xs font-medium text-slate-300">Live Multi-Device Sync</span>
-                </div>
-            </div>
-
-            <div class="pt-2">
-                <button id="googleSignInBtn" type="button" class="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold px-6 py-3 rounded-xl text-sm shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.99] cursor-pointer">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                    </svg>
-                    <span>Sign in with Google</span>
-                </button>
-            </div>
+            <button id="googleSignInBtn" class="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg">
+                <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                Sign in with Google
+            </button>
         </div>
     </div>
 
-    <!-- Main App Dashboard (hidden until user signs in) -->
-    <div id="appDashboard" class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6 hidden">
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-slate-800">
+    <!-- Main App Dashboard (Logged In View - Hidden by Default) -->
+    <div id="appDashboard" class="hidden">
+        <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-800">
             <div>
-                <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-400 to-cyan-300 bg-clip-text text-transparent flex items-center gap-3">
-                    🍿 Watchlist Studio 
-                    <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800/90 text-sky-400 border border-slate-700">v2.6.0</span>
-                </h1>
-                <p class="text-xs text-slate-400 mt-1">Multi-platform streaming aggregator with real-time sync</p>
+                <h1 class="text-2xl font-bold text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-950 text-sky-400 border border-sky-800 px-2 py-0.5 rounded-full">v2.6.0</span></h1>
             </div>
-            <div class="flex items-center flex-wrap gap-2.5 sm:gap-3">
-                <button id="themeToggleBtn" type="button" aria-label="Toggle Theme" class="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 hover:text-white transition shadow-sm">
-                    <span id="themeIcon">🌙</span>
-                    <span class="hidden sm:inline font-medium">Theme</span>
-                </button>
-
-                <!-- User Profile Info block -->
-                <div id="userProfileInfo" class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-xl shadow-inner">
-                    <img id="userAvatar" src="" alt="Avatar" class="w-6 h-6 rounded-full object-cover border border-slate-700 hidden">
-                    <span id="userDisplayName" class="text-xs font-medium text-slate-200"></span>
-                    <button id="startTourBtn" type="button" class="px-2 py-1 text-[11px] font-medium bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/60 rounded-lg transition shadow-sm">
-                        Tour
-                    </button>
-                    <button id="signOutBtn" type="button" class="px-2 py-1 text-[11px] font-medium bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 rounded-lg transition shadow-sm">
-                        Sign Out
-                    </button>
-                </div>
-
-                <div class="user-profile flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl shadow-inner">
-                    <span class="text-xs text-slate-400 font-medium">🏷️</span>
-                    <input type="text" id="userNameInput" placeholder="Item Tag (e.g., Rahul)" class="bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none w-32 sm:w-40">
+            <div class="flex items-center gap-4">
+                <button onclick="toggleTheme()" class="p-2 bg-slate-900 border border-slate-800 rounded-lg text-sm">☀️/🌙</button>
+                <div id="userProfileInfo" class="flex items-center gap-2">
+                    <img id="userAvatar" class="w-8 h-8 rounded-full border border-sky-400" src="" alt="User">
+                    <span id="userNameDisplay" class="text-xs font-semibold text-slate-300"></span>
+                    <button id="signOutBtn" class="text-xs bg-rose-950 text-rose-400 border border-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-900">Sign Out</button>
                 </div>
             </div>
         </header>
 
-        <!-- Collapsible Add & Bulk Upload Panel -->
-        <details id="actionDrawer" class="group bg-slate-900/70 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg transition-all" open>
-            <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none bg-slate-900/90 hover:bg-slate-800/60 transition-colors">
-                <div class="flex items-center gap-2.5">
-                    <span class="text-base text-sky-400">✨</span>
-                    <span class="font-semibold text-sm text-slate-200">Add Titles (Single & Bulk Import)</span>
-                </div>
-                <span class="text-xs text-slate-400 group-open:rotate-180 transition-transform duration-200">▼</span>
-            </summary>
-            
-            <div class="p-5 border-t border-slate-800/60 grid grid-cols-1 md:grid-cols-2 gap-5">
-                <!-- Single Add Panel -->
-                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
-                    <div>
-                        <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">
-                            <span>🎬</span> Add Single Title
-                        </h3>
-                        <div class="form-group">
-                            <label for="title" class="block text-xs font-medium text-slate-400 mb-1.5">Title</label>
-                            <input type="text" id="title" placeholder="e.g., Oppenheimer or Sacred Games" 
-                                class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition">
-                        </div>
-                    </div>
-                    <button class="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg text-xs shadow-md transition-all flex items-center justify-center gap-2" onclick="addItem()">
-                        <span>+</span> Add to Watchlist (Auto-Detect Provider)
-                    </button>
-                </div>
-
-                <!-- Bulk Upload Panel -->
-                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
-                    <div>
-                        <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">
-                            <span>📦</span> Bulk Upload
-                        </h3>
-                        <div class="form-group">
-                            <label for="bulkTitles" class="block text-xs font-medium text-slate-400 mb-1.5">Paste Titles (one per line)</label>
-                            <textarea id="bulkTitles" placeholder="The Dark Knight&#10;Mirzapur&#10;Dune" rows="3"
-                                class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 resize-none transition"></textarea>
-                        </div>
-                    </div>
-                    
-                    <button class="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg text-xs shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed" id="btnBulkUpload" onclick="bulkUpload()">
-                        Process Batch
-                    </button>
-                    
-                    <div class="progress-container space-y-1.5 pt-1" id="bulkProgressContainer" style="display: none;">
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="progress-status text-sky-400 font-medium truncate" id="bulkProgressStatus">Ready</span>
-                        </div>
-                        <div class="w-full h-2 bg-slate-950 border border-slate-700/80 rounded-full overflow-hidden">
-                            <div class="progress-bar-fill h-full bg-gradient-to-r from-sky-400 to-indigo-500 transition-all duration-200" id="bulkProgressBar" style="width: 0%;"></div>
-                        </div>
-                    </div>
-                </div>
+        <!-- Controls Bar -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6">
+            <div class="flex flex-wrap gap-4 items-center justify-between mb-4">
+                <input type="text" id="searchQuery" placeholder="🔍 Search titles..." oninput="renderWatchlist()" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm flex-1 max-w-xs">
+                <button id="toggleFilterDrawerBtn" onclick="toggleFilterDrawer()" class="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700">🎛️ Filters & Views</button>
             </div>
-        </details>
 
-        <!-- Search & Filter Controls Header -->
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div class="flex-1 relative">
-                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm">🔍</span>
-                <input type="text" id="searchQuery" placeholder="Search by title..." oninput="renderWatchlist()"
-                    class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition shadow-sm">
-            </div>
-            <button id="toggleFilterDrawerBtn" type="button" onclick="document.getElementById('filterDrawer').classList.toggle('hidden')"
-                class="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-200 hover:text-white transition shadow-sm cursor-pointer whitespace-nowrap">
-                <span>🎛️</span>
-                <span>Filters & Views</span>
-            </button>
-        </div>
-
-        <!-- Collapsible Filter & Group Builder Drawer (hidden by default on mobile, block on md+) -->
-        <div id="filterDrawer" class="hidden md:block">
-            <div class="toolbar bg-slate-900/70 border border-slate-800/80 rounded-2xl p-5 shadow-lg space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                    <div class="toolbar-group">
-                        <label for="filterType" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Type Filter</label>
-                        <select id="filterType" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="All">All Types</option>
-                            <option value="movie">Movies Only</option>
-                            <option value="tv">TV Shows Only</option>
-                        </select>
-                    </div>
-                    <div class="toolbar-group">
-                        <label for="filterPlatform" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Platform Filter</label>
-                        <select id="filterPlatform" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="All">All Platforms</option>
-                        </select>
-                    </div>
-                    <div class="toolbar-group">
-                        <label for="filterGenre" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Genre Filter</label>
-                        <select id="filterGenre" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="All">All Genres</option>
-                        </select>
-                    </div>
-                    <div class="toolbar-group">
-                        <label for="filterLanguage" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Language Filter</label>
-                        <select id="filterLanguage" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="All">All Languages</option>
-                        </select>
-                    </div>
-                    <div class="toolbar-group">
-                        <label for="filterStatus" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Status Filter</label>
-                        <select id="filterStatus" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="All">All Statuses</option>
-                            <option value="towatch">To Watch</option>
-                            <option value="watched">Watched</option>
-                        </select>
-                    </div>
+            <!-- Collapsible Filter Drawer -->
+            <div id="filterDrawer" class="hidden md:grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Type</label>
+                    <select id="filterType" onchange="renderWatchlist()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="All">All Types</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
                 </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div class="toolbar-group">
-                        <label for="sortBy" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Sort Order</label>
-                        <select id="sortBy" onchange="renderWatchlist()"
-                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition cursor-pointer">
-                            <option value="default">Default</option>
-                            <option value="title-asc">Title (A-Z)</option>
-                            <option value="title-desc">Title (Z-A)</option>
-                            <option value="rating-desc">Highest Rated</option>
-                        </select>
-                    </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Platform</label>
+                    <select id="filterPlatform" onchange="renderWatchlist()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="All">All Platforms</option></select>
                 </div>
-
-                <!-- Group Builder Section & Action Controls -->
-                <div class="pt-3 border-t border-slate-800/80 space-y-3.5">
-                    <!-- Sleek Tailwind Group Builder -->
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm">🗂️</span>
-                            <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Group Builder:</span>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 max-w-xl">
-                            <div class="flex items-center gap-2">
-                                <label for="primaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Primary:</label>
-                                <select id="primaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
-                                    <option value="none">None</option>
-                                    <option value="platform">Platform</option>
-                                    <option value="genre">Genre</option>
-                                    <option value="type">Type</option>
-                                    <option value="status">Status</option>
-                                    <option value="language">Language</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <label for="secondaryGroupSelect" class="text-xs text-slate-400 whitespace-nowrap">Secondary:</label>
-                                <select id="secondaryGroupSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/50 cursor-pointer">
-                                    <option value="none">None</option>
-                                    <option value="platform">Platform</option>
-                                    <option value="genre">Genre</option>
-                                    <option value="type">Type</option>
-                                    <option value="status">Status</option>
-                                    <option value="language">Language</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Toolbar Actions and View Selector -->
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <!-- View selector tabs -->
-                        <div class="grouping-bar flex items-center flex-wrap gap-1.5">
-                            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 mr-2">Quick Views:</span>
-                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-sky-400 text-slate-950 font-bold transition shadow-sm active" id="tab-none" onclick="setGrouping('none')">All (List View)</button>
-                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-genre" onclick="setGrouping('genre')">Group by Genre</button>
-                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-platform" onclick="setGrouping('platform')">Group by Platform</button>
-                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-type" onclick="setGrouping('type')">Group by Type</button>
-                            <button class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/80 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition shadow-sm" id="tab-status" onclick="setGrouping('status')">Group by Status</button>
-                        </div>
-
-                        <div class="toolbar-actions flex items-center gap-2">
-                            <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600/90 hover:bg-amber-600 text-white shadow-sm transition" onclick="deleteSelectedItems()">Delete Selected</button>
-                            <button class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-600/90 hover:bg-rose-600 text-white shadow-sm transition" onclick="clearAllItems()">Delete All</button>
-                        </div>
-                    </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Genre</label>
+                    <select id="filterGenre" onchange="renderWatchlist()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="All">All Genres</option></select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Language</label>
+                    <select id="filterLanguage" onchange="renderWatchlist()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="All">All Languages</option></select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Primary Group</label>
+                    <select id="primaryGroupSelect" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="none">None</option><option value="platform">Platform</option><option value="genre">Genre</option><option value="language">Language</option><option value="type">Type</option><option value="status">Status</option></select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Secondary Group</label>
+                    <select id="secondaryGroupSelect" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="none">None</option><option value="platform">Platform</option><option value="genre">Genre</option><option value="language">Language</option><option value="type">Type</option><option value="status">Status</option></select>
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase text-slate-400 mb-1">Sort By</label>
+                    <select id="sortBy" onchange="renderWatchlist()" class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs"><option value="default">Default</option><option value="rating-desc">⭐ Highest Rating</option><option value="title-asc">Title (A-Z)</option><option value="title-desc">Title (Z-A)</option></select>
                 </div>
             </div>
         </div>
 
-        <!-- Select All Controls Bar -->
-        <div class="select-bar bg-slate-900/60 border border-slate-800/80 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-xs text-slate-300">
-            <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" class="rounded border-slate-700 bg-slate-950 text-sky-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
-            <label for="selectAll" class="cursor-pointer select-none">Select / Deselect All Visible Items</label>
-        </div>
-
-        <!-- Watchlist Cards Container (Responsive Grid: 2 cols on mobile, 4 on md, 5 on lg) -->
-        <div id="watchlistDisplay" class="space-y-6"></div>
+        <!-- Watchlist Display Grid -->
+        <div id="watchlistDisplay"></div>
     </div>
 
-    <!-- Fallback structural classes for dynamically created elements from app.js -->
-    <style>
-        .card-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1rem;
-        }
-        @media (min-width: 768px) {
-            .card-grid {
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-            }
-        }
-        @media (min-width: 1024px) {
-            .card-grid {
-                grid-template-columns: repeat(5, minmax(0, 1fr));
-            }
-        }
-        .movie-card {
-            background-color: rgb(15 23 42 / 0.7);
-            border: 1px solid rgb(30 41 59 / 0.8);
-            border-radius: 0.75rem;
-            padding: 0.75rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            transition: all 0.2s ease;
-        }
-        .movie-card:hover {
-            border-color: rgb(56 189 248 / 0.6);
-            transform: translateY(-2px);
-        }
-        .movie-card.watched {
-            opacity: 0.55;
-            background-color: rgb(15 23 42 / 0.4);
-        }
-        .movie-card.watched .card-title {
-            text-decoration: line-through;
-            color: #94a3b8;
-        }
-        .poster-box {
-            width: 100%;
-            aspect-ratio: 2 / 3;
-            border-radius: 0.5rem;
-            overflow: hidden;
-            background-color: #020617;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .poster-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .card-body {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            flex: 1;
-            gap: 0.5rem;
-        }
-        .card-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-            line-height: 1.25rem;
-            color: #f8fafc;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .card-meta {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-top: 0.25rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            align-items: center;
-        }
-        .type-badge {
-            background-color: rgb(30 41 59);
-            color: rgb(56 189 248);
-            padding: 0.125rem 0.375rem;
-            border-radius: 0.25rem;
-            font-size: 0.65rem;
-            font-weight: 500;
-        }
-        .badge {
-            padding: 0.125rem 0.5rem;
-            font-size: 0.65rem;
-            font-weight: 700;
-            border-radius: 9999px;
-            text-transform: uppercase;
-        }
-        .badge-netflix { background-color: #ef4444; color: white; }
-        .badge-prime { background-color: #0284c7; color: white; }
-        .badge-disney, .badge-hotstar { background-color: #2563eb; color: white; }
-        .badge-jiocinema { background-color: #ec4899; color: white; }
-        .badge-default { background-color: #475569; color: white; }
-        .card-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-top: 1px solid rgb(30 41 59 / 0.8);
-            padding-top: 0.5rem;
-            margin-top: auto;
-            gap: 0.5rem;
-        }
-        .btn-small {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.7rem;
-            border-radius: 0.375rem;
-        }
-        .btn-danger {
-            background-color: #dc2626;
-            color: white;
-        }
-        .group-section {
-            margin-bottom: 1.5rem;
-        }
-        .group-header {
-            font-size: 0.95rem;
-            font-weight: 700;
-            color: #38bdf8;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background-color: rgb(15 23 42 / 0.8);
-            padding: 0.625rem 0.875rem;
-            border-radius: 0.75rem;
-            border: 1px solid rgb(30 41 59);
-            cursor: pointer;
-            user-select: none;
-            margin-bottom: 0.75rem;
-        }
-        .group-title-left {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .chevron {
-            transition: transform 0.2s ease;
-            display: inline-block;
-            font-size: 0.75rem;
-        }
-        .group-section.collapsed .chevron {
-            transform: rotate(-90deg);
-        }
-        .group-section.collapsed .card-grid {
-            display: none;
-        }
-        .group-count {
-            font-size: 0.7rem;
-            background-color: rgb(30 41 59);
-            color: #f8fafc;
-            padding: 0.125rem 0.5rem;
-            border-radius: 9999px;
-        }
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #94a3b8;
-            font-size: 0.875rem;
-            background-color: rgb(15 23 42 / 0.5);
-            border-radius: 1rem;
-            border: 1px dashed rgb(30 41 59);
-        }
-        .tab-btn.active {
-            background-color: #38bdf8 !important;
-            color: #020617 !important;
-            font-weight: 700 !important;
-            border-color: #38bdf8 !important;
-        }
-    </style>
-
+    <!-- Firebase SDK Compat Version -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
