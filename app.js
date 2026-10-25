@@ -2,6 +2,24 @@
 const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
 const OMDB_API_KEY = "trilogy";
 
+// Firebase Configuration for Watchlist Studio
+const firebaseConfig = {
+  apiKey: "AIzaSyDZUG-4XfUscT_SQHfVsA3YC0DlfCSiCvI",
+  authDomain: "watchlist-studio-14978.firebaseapp.com",
+  projectId: "watchlist-studio-14978",
+  storageBucket: "watchlist-studio-14978.firebasestorage.app",
+  messagingSenderId: "519504217727",
+  appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
+};
+
+// Initialize Firebase App & Cloud Firestore Database
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
+
+let cachedWatchlist = [];
+
 const TMDB_GENRE_MAP = {
     // Movie genres
     28: "Action",
@@ -37,18 +55,51 @@ const TMDB_GENRE_MAP = {
 let activeGrouping = 'none';
 
 document.addEventListener('DOMContentLoaded', () => {
-    populateFilterDropdowns();
-    renderWatchlist();
+    // Restore username if previously saved locally
+    const savedName = localStorage.getItem('watchlist_username');
+    const nameInput = document.getElementById('userName') || document.getElementById('userNameInput');
+    if (savedName && nameInput) {
+        nameInput.value = savedName;
+    }
+    if (nameInput) {
+        nameInput.addEventListener('change', () => {
+            localStorage.setItem('watchlist_username', nameInput.value.trim());
+        });
+    }
+
+    // Live real-time Firestore sync listener across all devices
+    db.collection('watchlist').onSnapshot((snapshot) => {
+        cachedWatchlist = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                ...data,
+                id: data.id || doc.id,
+                docId: doc.id
+            };
+        });
+        populateFilterDropdowns();
+        renderWatchlist();
+    }, (error) => {
+        console.error("Firestore onSnapshot error:", error);
+    });
 });
 
 function getWatchlist() {
-    const stored = localStorage.getItem('myWatchlist');
-    return stored ? JSON.parse(stored) : [];
+    return cachedWatchlist;
 }
 
-function saveWatchlist(watchlist) {
-    localStorage.setItem('myWatchlist', JSON.stringify(watchlist));
-    populateFilterDropdowns();
+async function saveWatchlist(watchlist) {
+    // Replaced localStorage with Firestore batch updates
+    try {
+        const batch = db.batch();
+        watchlist.forEach(item => {
+            const docRef = db.collection('watchlist').doc(String(item.id));
+            batch.set(docRef, item, { merge: true });
+        });
+        await batch.commit();
+    } catch (err) {
+        console.error("Error saving watchlist to Firestore:", err);
+    }
 }
 
 function setGrouping(mode) {
@@ -56,6 +107,11 @@ function setGrouping(mode) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`tab-${mode}`).classList.add('active');
     renderWatchlist();
+}
+
+function getUserName() {
+    const input = document.getElementById('userName') || document.getElementById('userNameInput');
+    return (input && input.value.trim()) ? input.value.trim() : 'Anonymous';
 }
 
 function getPlatformBadgeClass(platform) {
@@ -340,6 +396,7 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
                         <span class="type-badge">${item.typeLabel || '🎬 Movie'}</span>
                         ${item.genre ? `<span class="type-badge">${item.genre}</span>` : ''}
                         <span>Release: <strong>${item.year}</strong></span>
+                        ${item.addedBy ? `<span style="margin-left: 6px; color: var(--accent-blue);">👤 ${item.addedBy}</span>` : ''}
                     </div>
                 </div>
                 <div class="card-footer">
@@ -373,6 +430,8 @@ async function addItem() {
         return;
     }
 
+    const addedBy = getUserName();
+
     const newItem = {
         id: Date.now(),
         title: apiResult.title,
@@ -383,15 +442,17 @@ async function addItem() {
         genre: apiResult.genre,
         year: apiResult.year,
         poster: apiResult.poster,
-        watched: false
+        watched: false,
+        addedBy: addedBy
     };
 
-    const items = getWatchlist();
-    items.push(newItem);
-    saveWatchlist(items);
-
-    renderWatchlist();
-    titleInput.value = '';
+    try {
+        await db.collection('watchlist').doc(String(newItem.id)).set(newItem);
+        titleInput.value = '';
+    } catch (err) {
+        console.error("Error adding item to Firestore:", err);
+        alert("Failed to save item to Firestore. Check console/Firebase config.");
+    }
 }
 
 async function bulkUpload() {
@@ -416,9 +477,11 @@ async function bulkUpload() {
     if (progressContainer) progressContainer.style.display = 'block';
     if (bulkButton) bulkButton.disabled = true;
 
-    let items = getWatchlist();
+    const addedBy = getUserName();
+
     let addedCount = 0;
     let failedTitles = [];
+    const itemsToAdd = [];
 
     try {
         for (let index = 0; index < lines.length; index++) {
@@ -435,7 +498,7 @@ async function bulkUpload() {
 
             const apiResult = await fetchTMDBDetails(title);
             if (apiResult.valid) {
-                items.push({
+                itemsToAdd.push({
                     id: Date.now() + index,
                     title: apiResult.title,
                     type: apiResult.type,
@@ -445,24 +508,31 @@ async function bulkUpload() {
                     genre: apiResult.genre,
                     year: apiResult.year,
                     poster: apiResult.poster,
-                    watched: false
+                    watched: false,
+                    addedBy: addedBy
                 });
                 addedCount++;
             } else {
                 failedTitles.push(title);
             }
         }
+
+        if (itemsToAdd.length > 0) {
+            const batch = db.batch();
+            itemsToAdd.forEach(item => {
+                const docRef = db.collection('watchlist').doc(String(item.id));
+                batch.set(docRef, item);
+            });
+            await batch.commit();
+            document.getElementById('bulkTitles').value = '';
+        }
+    } catch (err) {
+        console.error("Error bulk uploading items to Firestore:", err);
     } finally {
         if (progressContainer) progressContainer.style.display = 'none';
         if (progressBar) progressBar.style.width = '0%';
         if (progressStatus) progressStatus.textContent = 'Ready';
         if (bulkButton) bulkButton.disabled = false;
-    }
-
-    if (addedCount > 0) {
-        saveWatchlist(items);
-        renderWatchlist();
-        document.getElementById('bulkTitles').value = '';
     }
 
     let msg = `Added ${addedCount} titles successfully!`;
@@ -472,25 +542,31 @@ async function bulkUpload() {
     alert(msg);
 }
 
-function toggleWatched(id) {
-    let items = getWatchlist();
-    items = items.map(item => item.id === id ? { ...item, watched: !item.watched } : item);
-    saveWatchlist(items);
-    renderWatchlist();
+async function toggleWatched(id) {
+    const item = cachedWatchlist.find(i => String(i.id) === String(id));
+    if (!item) return;
+    try {
+        await db.collection('watchlist').doc(String(item.id)).update({
+            watched: !item.watched
+        });
+    } catch (err) {
+        console.error("Error updating watched status in Firestore:", err);
+    }
 }
 
-function deleteItem(id) {
-    let items = getWatchlist();
-    items = items.filter(item => item.id !== id);
-    saveWatchlist(items);
-    renderWatchlist();
+async function deleteItem(id) {
+    try {
+        await db.collection('watchlist').doc(String(id)).delete();
+    } catch (err) {
+        console.error("Error deleting item from Firestore:", err);
+    }
 }
 
 function toggleSelectAll(masterCheckbox) {
     document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = masterCheckbox.checked);
 }
 
-function deleteSelectedItems() {
+async function deleteSelectedItems() {
     const checkboxes = document.querySelectorAll('.item-checkbox:checked');
     if (checkboxes.length === 0) {
         alert('Please select at least one item to delete.');
@@ -498,16 +574,31 @@ function deleteSelectedItems() {
     }
 
     if (confirm(`Delete ${checkboxes.length} selected item(s)?`)) {
-        const selectedIds = Array.from(checkboxes).map(cb => Number(cb.dataset.id));
-        let items = getWatchlist().filter(item => !selectedIds.includes(item.id));
-        saveWatchlist(items);
-        renderWatchlist();
+        const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.id);
+        try {
+            const batch = db.batch();
+            selectedIds.forEach(id => {
+                const docRef = db.collection('watchlist').doc(String(id));
+                batch.delete(docRef);
+            });
+            await batch.commit();
+        } catch (err) {
+            console.error("Error batch deleting items from Firestore:", err);
+        }
     }
 }
 
-function clearAllItems() {
+async function clearAllItems() {
     if (confirm('Delete your entire watchlist?')) {
-        localStorage.removeItem('myWatchlist');
-        renderWatchlist();
+        try {
+            const batch = db.batch();
+            cachedWatchlist.forEach(item => {
+                const docRef = db.collection('watchlist').doc(String(item.id));
+                batch.delete(docRef);
+            });
+            await batch.commit();
+        } catch (err) {
+            console.error("Error clearing watchlist from Firestore:", err);
+        }
     }
 }

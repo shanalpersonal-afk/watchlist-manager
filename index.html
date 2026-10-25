@@ -3,13 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio - v2.2.0</title>
+    <title>Watchlist Studio - v2.3.0</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Firebase App & Cloud Firestore (Compat SDK for straightforward browser script usage) -->
+     <!-- Firebase SDKs (Browser Compat Version) -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
     <header>
-        <h1>🍿 Watchlist Studio <span class="version-tag">v2.2.0</span></h1>
+        <h1>🍿 Watchlist Studio <span class="version-tag">v2.3.0</span></h1>
+        <div class="user-profile">
+            <input type="text" id="userNameInput" placeholder="Your Name (e.g., Rahul)" style="width: 200px;">
+        </div>
     </header>
 
     <div class="grid-forms">
