@@ -125,8 +125,7 @@ function getWatchlist() {
 // ==========================================
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'light') document.documentElement.classList.remove('dark');
-    else document.documentElement.classList.add('dark');
+    document.documentElement.classList.toggle('dark', savedTheme !== 'light');
 }
 
 function toggleTheme() {
@@ -171,9 +170,9 @@ function populateFilterDropdowns() {
     }
     const langSelect = document.getElementById('filterLanguage');
     if (langSelect) {
-        const languages = [...new Set(items.map(i => i.language).filter(Boolean))].sort();
-        langSelect.innerHTML = '<option value="All">All Languages</option>';
-        languages.forEach(l => { langSelect.innerHTML += `<option value="${l}">${l}</option>`; });
+        const languages = [...new Set(items.map(i => i.language?.trim()).filter(Boolean))].sort();
+        langSelect.replaceChildren(new Option('All Languages', 'All'));
+        languages.forEach(language => langSelect.add(new Option(language, language)));
     }
     const platformSelect = document.getElementById('filterPlatform');
     if (platformSelect) {
@@ -340,6 +339,14 @@ function renderGroupCards(parentContainer, items) {
         
         const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
+
+        async function toggleWatched(docId) {
+            const item = currentWatchlistItems.find(item => item.docId === docId);
+            if (db && item) {
+                await db.collection('watchlist').doc(docId).update({ watched: !item.watched });
+            }
+        }
+
         const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
 
         card.innerHTML = `
