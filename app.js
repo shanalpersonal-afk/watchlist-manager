@@ -16,9 +16,6 @@ const firebaseConfig = {
   appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
 };
 
-// Initialize Firebase
-//const app = initializeApp(firebaseConfig);
-
 if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -46,25 +43,17 @@ let currentWatchlistItems = [];
 let currentUser = null;
 
 // ==========================================
-// 2. Auth State & Event Listeners
+// 2. Auth State & Lifecycle Event Listeners
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     
-    // Bind Auth Buttons
     const googleBtn = document.getElementById('googleSignInBtn');
     if (googleBtn) googleBtn.addEventListener('click', loginWithGoogle);
 
     const signOutBtn = document.getElementById('signOutBtn');
     if (signOutBtn) signOutBtn.addEventListener('click', logoutUser);
 
-    // Grouping Control Listeners
-    const primarySelect = document.getElementById('primaryGroupSelect');
-    const secondarySelect = document.getElementById('secondaryGroupSelect');
-    if (primarySelect) primarySelect.addEventListener('change', renderWatchlist);
-    if (secondarySelect) secondarySelect.addEventListener('change', renderWatchlist);
-
-    // Monitor Authentication State
     if (auth) {
         auth.onAuthStateChanged(user => {
             const splash = document.getElementById('splashScreen');
@@ -121,11 +110,15 @@ function getWatchlist() {
 }
 
 // ==========================================
-// 3. UI Helper Functions
+// 3. Theme Switcher & UI Helpers
 // ==========================================
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
-    document.documentElement.classList.toggle('dark', savedTheme !== 'light');
+    if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+    } else {
+        document.documentElement.classList.add('dark');
+    }
 }
 
 function toggleTheme() {
@@ -162,18 +155,24 @@ function getPlatformBadgeClass(platform) {
 
 function populateFilterDropdowns() {
     const items = getWatchlist();
+    
+    // Genres
     const genreSelect = document.getElementById('filterGenre');
     if (genreSelect) {
         const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
         genreSelect.innerHTML = '<option value="All">All Genres</option>';
         genres.forEach(g => { genreSelect.innerHTML += `<option value="${g}">${g}</option>`; });
     }
+
+    // Languages (Populates dynamically!)
     const langSelect = document.getElementById('filterLanguage');
     if (langSelect) {
-        const languages = [...new Set(items.map(i => i.language?.trim()).filter(Boolean))].sort();
-        langSelect.replaceChildren(new Option('All Languages', 'All'));
-        languages.forEach(language => langSelect.add(new Option(language, language)));
+        const languages = [...new Set(items.map(i => i.language).filter(Boolean))].sort();
+        langSelect.innerHTML = '<option value="All">All Languages</option>';
+        languages.forEach(l => { langSelect.innerHTML += `<option value="${l}">${l}</option>`; });
     }
+
+    // Platforms
     const platformSelect = document.getElementById('filterPlatform');
     if (platformSelect) {
         const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
@@ -184,7 +183,7 @@ function populateFilterDropdowns() {
 }
 
 // ==========================================
-// 4. TMDB Fetching & Render Engine
+// 4. TMDB Details & Rendering Engine
 // ==========================================
 async function fetchTMDBDetails(queryTitle) {
     const cleanTitle = queryTitle.trim();
@@ -227,16 +226,16 @@ async function fetchTMDBDetails(queryTitle) {
             } catch (e) {}
 
             return {
-                valid: true, 
-                title: displayTitle, 
-                type: mediaType, 
+                valid: true,
+                title: displayTitle,
+                type: mediaType,
                 typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
-                year: releaseYear, 
-                genre: primaryGenre, 
-                rating: ratingVal, 
-                language: languageName, // Saved Language Field
-                platform: indiaPlatforms[0] || 'Not Streaming in IN', 
-                platforms: indiaPlatforms, 
+                year: releaseYear,
+                genre: primaryGenre,
+                rating: ratingVal,
+                language: languageName, // Saves original language name
+                platform: indiaPlatforms[0] || 'Not Streaming in IN',
+                platforms: indiaPlatforms,
                 poster: posterUrl
             };
         }
@@ -255,20 +254,15 @@ function renderWatchlist() {
     const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
     const sortBy = document.getElementById('sortBy')?.value || 'default';
 
-    const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
-    const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
-
     container.innerHTML = '';
     let items = getWatchlist();
 
-    // 1. Filtering
     if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
     if (filterType !== 'All') items = items.filter(i => i.type === filterType);
     if (filterPlatform !== 'All') items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
     if (filterGenre !== 'All') items = items.filter(i => i.genre === filterGenre);
     if (filterLanguage !== 'All') items = items.filter(i => i.language === filterLanguage);
 
-    // 2. Sorting
     if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
 
     if (items.length === 0) {
@@ -276,57 +270,7 @@ function renderWatchlist() {
         return;
     }
 
-    // 3. Multi-Grouping Engine
-    if (primaryGroup === 'none') {
-        renderGroupCards(container, items);
-    } else {
-        const primaryGroups = groupItemsBy(items, primaryGroup);
-        
-        Object.keys(primaryGroups).sort().forEach(pKey => {
-            const pItems = primaryGroups[pKey];
-            
-            const groupSection = document.createElement('div');
-            groupSection.className = 'mb-8 bg-slate-900 border border-slate-800 rounded-xl p-4';
-            
-            const groupHeader = document.createElement('h3');
-            groupHeader.className = 'text-lg font-bold text-sky-400 mb-4 flex items-center justify-between border-b border-slate-800 pb-2';
-            groupHeader.innerHTML = `<span>${primaryGroup.toUpperCase()}: ${pKey}</span> <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full">${pItems.length}</span>`;
-            groupSection.appendChild(groupHeader);
-
-            if (secondaryGroup === 'none' || secondaryGroup === primaryGroup) {
-                renderGroupCards(groupSection, pItems);
-            } else {
-                const secondaryGroups = groupItemsBy(pItems, secondaryGroup);
-                Object.keys(secondaryGroups).sort().forEach(sKey => {
-                    const sItems = secondaryGroups[sKey];
-                    
-                    const subHeader = document.createElement('h4');
-                    subHeader.className = 'text-sm font-semibold text-indigo-300 my-3 pl-2 border-l-2 border-indigo-500';
-                    subHeader.textContent = `${secondaryGroup.toUpperCase()}: ${sKey} (${sItems.length})`;
-                    groupSection.appendChild(subHeader);
-                    
-                    renderGroupCards(groupSection, sItems);
-                });
-            }
-            container.appendChild(groupSection);
-        });
-    }
-}
-
-function groupItemsBy(items, criteria) {
-    const groups = {};
-    items.forEach(item => {
-        let val = 'Other';
-        if (criteria === 'platform') val = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
-        else if (criteria === 'genre') val = item.genre || 'General';
-        else if (criteria === 'language') val = item.language || 'English';
-        else if (criteria === 'type') val = item.typeLabel || 'Movie';
-        else if (criteria === 'status') val = item.watched ? 'Watched' : 'To Watch';
-        
-        if (!groups[val]) groups[val] = [];
-        groups[val].push(item);
-    });
-    return groups;
+    renderGroupCards(container, items);
 }
 
 function renderGroupCards(parentContainer, items) {
@@ -335,19 +279,11 @@ function renderGroupCards(parentContainer, items) {
 
     items.forEach(item => {
         const card = document.createElement('div');
-        card.className = `movie-card bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between transition-all hover:-translate-y-1 hover:border-sky-400 ${item.watched ? 'opacity-50' : ''}`;
+        card.className = `movie-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between transition-all hover:-translate-y-1 hover:border-sky-400 ${item.watched ? 'opacity-50' : ''}`;
         
         const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
-
-        async function toggleWatched(docId) {
-            const item = currentWatchlistItems.find(item => item.docId === docId);
-            if (db && item) {
-                await db.collection('watchlist').doc(docId).update({ watched: !item.watched });
-            }
-        }
-
-        const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
+        const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-200 dark:bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
 
         card.innerHTML = `
             <div class="relative">
@@ -357,14 +293,17 @@ function renderGroupCards(parentContainer, items) {
             </div>
             <div class="p-3 flex-1 flex flex-col justify-between">
                 <div>
-                    <h4 class="font-bold text-sm text-slate-100 leading-snug line-clamp-2">${item.title}</h4>
-                    <div class="text-xs text-slate-400 space-x-2 mt-1">
+                    <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 leading-snug line-clamp-2 ${item.watched ? 'line-through text-slate-400' : ''}">${item.title}</h4>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 space-x-2 mt-1">
                         <span>🌐 ${item.language || 'EN'}</span>
                         <span>🗓️ ${item.year || 'N/A'}</span>
                     </div>
                 </div>
-                <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-800 text-xs">
-                    <button class="text-rose-400 hover:text-rose-300 font-semibold" onclick="deleteItem('${item.docId}')">Delete</button>
+                <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <button class="${item.watched ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}" onclick="toggleWatched('${item.docId}')">
+                        ${item.watched ? '↩️ Unwatch' : '✓ Watched'}
+                    </button>
+                    <button class="text-rose-500 hover:text-rose-400 font-semibold" onclick="deleteItem('${item.docId}')">Delete</button>
                 </div>
             </div>
         `;
@@ -374,8 +313,60 @@ function renderGroupCards(parentContainer, items) {
     parentContainer.appendChild(grid);
 }
 
-async function deleteItem(id) {
-    if (db && id) {
-        await db.collection('watchlist').doc(id).delete();
+// ==========================================
+// 5. Data Mutations (Watched / Add / Delete)
+// ==========================================
+async function addItem() {
+    const titleInput = document.getElementById('title');
+    const rawTitle = titleInput ? titleInput.value.trim() : '';
+
+    if (rawTitle === '') {
+        alert('Please enter a title!');
+        return;
+    }
+
+    const apiResult = await fetchTMDBDetails(rawTitle);
+    
+    if (!apiResult.valid) {
+        alert(`❌ ${apiResult.error}`);
+        return;
+    }
+
+    const newItem = {
+        title: apiResult.title,
+        type: apiResult.type,
+        typeLabel: apiResult.typeLabel,
+        platform: apiResult.platform,
+        platforms: apiResult.platforms,
+        genre: apiResult.genre,
+        rating: apiResult.rating,
+        language: apiResult.language,
+        year: apiResult.year,
+        poster: apiResult.poster,
+        watched: false,
+        addedBy: currentUser ? (currentUser.displayName || currentUser.email) : 'Guest'
+    };
+
+    if (db) {
+        await db.collection('watchlist').add(newItem);
+    }
+
+    if (titleInput) titleInput.value = '';
+}
+
+async function toggleWatched(docId) {
+    if (db && docId) {
+        const item = currentWatchlistItems.find(i => i.docId === docId);
+        if (item) {
+            await db.collection('watchlist').doc(docId).update({
+                watched: !item.watched
+            });
+        }
+    }
+}
+
+async function deleteItem(docId) {
+    if (db && docId) {
+        await db.collection('watchlist').doc(docId).delete();
     }
 }
