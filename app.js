@@ -1,6 +1,13 @@
+// High-Reliability API Configuration
+const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
+const OMDB_API_KEY = "trilogy";
+
 let activeGrouping = 'none';
 
-document.addEventListener('DOMContentLoaded', renderWatchlist);
+document.addEventListener('DOMContentLoaded', () => {
+    populateFilterDropdowns();
+    renderWatchlist();
+});
 
 function getWatchlist() {
     const stored = localStorage.getItem('myWatchlist');
@@ -9,6 +16,7 @@ function getWatchlist() {
 
 function saveWatchlist(watchlist) {
     localStorage.setItem('myWatchlist', JSON.stringify(watchlist));
+    populateFilterDropdowns();
 }
 
 function setGrouping(mode) {
@@ -19,46 +27,141 @@ function setGrouping(mode) {
 }
 
 function getPlatformBadgeClass(platform) {
-    switch(platform) {
-        case 'Netflix': return 'badge-netflix';
-        case 'Prime Video': return 'badge-prime';
-        case 'Disney+': return 'badge-disney';
-        case 'Hotstar': return 'badge-hotstar';
-        default: return '';
-    }
+    if (!platform) return 'badge-default';
+    const p = platform.toLowerCase();
+    if (p.includes('netflix')) return 'badge-netflix';
+    if (p.includes('prime') || p.includes('amazon')) return 'badge-prime';
+    if (p.includes('hotstar') || p.includes('disney')) return 'badge-hotstar';
+    if (p.includes('jio')) return 'badge-jiocinema';
+    return 'badge-default';
 }
 
-// OMDb API Fetcher with Validation, Poster, and Primary Genre Extraction
-async function fetchMovieDetails(title) {
+function populateFilterDropdowns() {
+    const items = getWatchlist();
+    
+    // Dynamic Genres
+    const genreSelect = document.getElementById('filterGenre');
+    const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
+    genreSelect.innerHTML = '<option value="All">All Genres</option>';
+    genres.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g; opt.textContent = g;
+        genreSelect.appendChild(opt);
+    });
+
+    // Dynamic Platforms
+    const platformSelect = document.getElementById('filterPlatform');
+    const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
+    const uniquePlatforms = [...new Set(allPlatforms)].sort();
+    platformSelect.innerHTML = '<option value="All">All Platforms</option>';
+    uniquePlatforms.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p; opt.textContent = p;
+        platformSelect.appendChild(opt);
+    });
+}
+
+// Multi-Tier Search Engine: TMDB (TV/Movie endpoints + IN Watch Providers) with OMDb Fallback
+async function fetchTMDBDetails(queryTitle) {
+    const cleanTitle = queryTitle.trim();
+
     try {
-        const response = await fetch(`https://www.omdbapi.com/?apikey=trilogy&t=${encodeURIComponent(title)}`);
-        const data = await response.json();
+        // 1. Try TMDB TV Show Search First
+        let tvRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
+        let tvData = await tvRes.json();
         
-        if (data.Response === "True") {
-            // Extract primary genre (first item before comma)
-            const primaryGenre = data.Genre ? data.Genre.split(',')[0].trim() : 'Other';
-            const posterUrl = (data.Poster && data.Poster !== "N/A") ? data.Poster : null;
+        let match = null;
+        let mediaType = 'movie';
+
+        if (tvData.results && tvData.results.length > 0) {
+            match = tvData.results[0];
+            mediaType = 'tv';
+        } else {
+            // 2. Try TMDB Movie Search if TV search returned nothing
+            let movieRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
+            let movieData = await movieRes.json();
+            if (movieData.results && movieData.results.length > 0) {
+                match = movieData.results[0];
+                mediaType = 'movie';
+            }
+        }
+
+        // If TMDB found a match, query India Watch Providers (region=IN)
+        if (match) {
+            const displayTitle = match.title || match.name;
+            const releaseYear = (match.release_date || match.first_air_date || '').split('-')[0] || 'N/A';
+            const posterUrl = match.poster_path ? `https://image.tmdb.org/t/p/w200${match.poster_path}` : null;
+
+            let indiaPlatforms = [];
+            try {
+                const providerRes = await fetch(
+                    `https://api.themoviedb.org/3/${mediaType}/${match.id}/watch/providers?api_key=${TMDB_API_KEY}`
+                );
+                const providerData = await providerRes.json();
+                
+                if (providerData.results && providerData.results.IN && providerData.results.IN.flatrate) {
+                    indiaPlatforms = providerData.results.IN.flatrate.map(p => p.provider_name);
+                }
+            } catch (pErr) {
+                console.warn("Watch provider lookup skipped for IN:", pErr);
+            }
+
+            const primaryPlatform = indiaPlatforms.length > 0 ? indiaPlatforms[0] : 'Not Streaming in IN';
 
             return {
                 valid: true,
-                title: data.Title, // Use official API title formatting
-                year: data.Year || 'N/A',
-                genre: primaryGenre,
-                fullGenre: data.Genre || 'N/A',
+                title: displayTitle,
+                type: mediaType,
+                typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
+                year: releaseYear,
+                genre: mediaType === 'tv' ? 'TV Series' : 'Cinema',
+                platform: primaryPlatform,
+                platforms: indiaPlatforms.length > 0 ? indiaPlatforms : ['Not Streaming in IN'],
                 poster: posterUrl
             };
-        } else {
-            return { valid: false, error: data.Error || 'Movie not found' };
         }
-    } catch (error) {
-        return { valid: false, error: 'Network error connecting to API' };
+    } catch (tmdbErr) {
+        console.warn("TMDB Search failed, falling back to OMDb:", tmdbErr);
     }
+
+    // 3. Fallback to OMDb API if TMDB search misses
+    try {
+        const omdbRes = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_API_KEY}&t=${encodeURIComponent(cleanTitle)}`);
+        const omdbData = await omdbRes.json();
+
+        if (omdbData.Response === "True") {
+            const isSeries = omdbData.Type === 'series';
+            const primaryGenre = omdbData.Genre ? omdbData.Genre.split(',')[0].trim() : 'General';
+            const posterUrl = (omdbData.Poster && omdbData.Poster !== "N/A") ? omdbData.Poster : null;
+
+            return {
+                valid: true,
+                title: omdbData.Title,
+                type: isSeries ? 'tv' : 'movie',
+                typeLabel: isSeries ? '📺 TV Show' : '🎬 Movie',
+                year: omdbData.Year || 'N/A',
+                genre: primaryGenre,
+                platform: 'Check Local Apps',
+                platforms: ['Check Local Apps'],
+                poster: posterUrl
+            };
+        }
+    } catch (omdbErr) {
+        console.error("OMDb Fallback failed:", omdbErr);
+    }
+
+    return { valid: false, error: `Could not find "${cleanTitle}". Check spelling.` };
 }
 
 function renderWatchlist() {
     const container = document.getElementById('watchlistDisplay');
-    const sortBy = document.getElementById('sortBy').value;
+    
     const searchQuery = document.getElementById('searchQuery').value.toLowerCase().trim();
+    const filterType = document.getElementById('filterType').value;
+    const filterPlatform = document.getElementById('filterPlatform').value;
+    const filterGenre = document.getElementById('filterGenre').value;
+    const filterStatus = document.getElementById('filterStatus').value;
+    const sortBy = document.getElementById('sortBy').value;
     
     container.innerHTML = '';
     document.getElementById('selectAll').checked = false;
@@ -66,7 +169,21 @@ function renderWatchlist() {
     let items = getWatchlist();
 
     if (searchQuery !== '') {
-        items = items.filter(item => item.title.toLowerCase().includes(searchQuery));
+        items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
+    }
+    if (filterType !== 'All') {
+        items = items.filter(i => i.type === filterType);
+    }
+    if (filterPlatform !== 'All') {
+        items = items.filter(i => (i.platforms || [i.platform]).includes(filterPlatform));
+    }
+    if (filterGenre !== 'All') {
+        items = items.filter(i => i.genre === filterGenre);
+    }
+    if (filterStatus === 'watched') {
+        items = items.filter(i => i.watched);
+    } else if (filterStatus === 'towatch') {
+        items = items.filter(i => !i.watched);
     }
 
     if (sortBy === 'title-asc') {
@@ -76,25 +193,21 @@ function renderWatchlist() {
     }
 
     if (items.length === 0) {
-        container.innerHTML = `<div class="empty-state">No titles found in your watchlist.</div>`;
+        container.innerHTML = `<div class="empty-state">No matching titles found for the selected filter combination.</div>`;
         return;
     }
 
     if (activeGrouping === 'none') {
-        renderGroup(container, 'All Movies & Shows', items, 'all');
-    } else if (activeGrouping === 'genre') {
-        // Collect all unique API genres dynamically
-        const genres = [...new Set(items.map(i => i.genre))];
-        genres.sort().forEach(genre => {
-            const groupItems = items.filter(i => i.genre === genre);
-            if (groupItems.length > 0) {
-                renderGroup(container, `${genre} Titles`, groupItems, genre);
-            }
-        });
+        renderGroup(container, 'Filtered Results', items, 'all');
+    } else if (activeGrouping === 'type') {
+        const movies = items.filter(i => i.type === 'movie');
+        const series = items.filter(i => i.type === 'tv');
+        if (movies.length > 0) renderGroup(container, '🎬 Movies', movies, 'movies');
+        if (series.length > 0) renderGroup(container, '📺 TV Shows', series, 'series');
     } else if (activeGrouping === 'platform') {
-        const platforms = ['Netflix', 'Prime Video', 'Disney+', 'Hotstar'];
+        const platforms = [...new Set(items.flatMap(i => i.platforms || [i.platform]))].sort();
         platforms.forEach(platform => {
-            const groupItems = items.filter(i => i.platform === platform);
+            const groupItems = items.filter(i => (i.platforms || [i.platform]).includes(platform));
             if (groupItems.length > 0) {
                 renderGroup(container, platform, groupItems, platform);
             }
@@ -102,9 +215,10 @@ function renderWatchlist() {
     } else if (activeGrouping === 'status') {
         const toWatch = items.filter(i => !i.watched);
         const watched = items.filter(i => i.watched);
-        
         if (toWatch.length > 0) renderGroup(container, '⏳ To Watch', toWatch, 'towatch');
         if (watched.length > 0) renderGroup(container, '✅ Watched History', watched, 'watched');
+    } else {
+        renderGroup(container, 'All Titles', items, 'all');
     }
 }
 
@@ -132,7 +246,9 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
     items.forEach(item => {
         const card = document.createElement('div');
         card.className = `movie-card ${item.watched ? 'watched' : ''}`;
-        const badgeClass = getPlatformBadgeClass(item.platform);
+        
+        const mainPlatform = (item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform;
+        const badgeClass = getPlatformBadgeClass(mainPlatform);
 
         const posterHtml = item.poster 
             ? `<img src="${item.poster}" class="poster-img" alt="${item.title}">` 
@@ -149,10 +265,12 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
                             <input type="checkbox" class="item-checkbox" data-id="${item.id}">
                             <div class="card-title">${item.title}</div>
                         </div>
-                        <span class="badge ${badgeClass}">${item.platform}</span>
+                        <span class="badge ${badgeClass}">${mainPlatform}</span>
                     </div>
-                    <div class="card-meta">Genre: <strong>${item.genre}</strong></div>
-                    <div class="api-details">🗓️ ${item.year || 'N/A'}</div>
+                    <div class="card-meta">
+                        <span class="type-badge">${item.typeLabel || '🎬 Movie'}</span>
+                        <span>Release: <strong>${item.year}</strong></span>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <button class="tab-btn btn-small" onclick="toggleWatched(${item.id})">
@@ -171,29 +289,28 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
 
 async function addItem() {
     const titleInput = document.getElementById('title');
-    const platformSelect = document.getElementById('platform');
-
     const rawTitle = titleInput.value.trim();
+
     if (rawTitle === '') {
         alert('Please enter a title!');
         return;
     }
 
-    // 1. Validate title via API
-    const apiResult = await fetchMovieDetails(rawTitle);
+    const apiResult = await fetchTMDBDetails(rawTitle);
     
     if (!apiResult.valid) {
-        alert(`❌ Error: Could not find movie "${rawTitle}". Please check the spelling.`);
+        alert(`❌ ${apiResult.error}`);
         return;
     }
 
-    // 2. Build item using official API details
     const newItem = {
         id: Date.now(),
         title: apiResult.title,
-        platform: platformSelect.value,
+        type: apiResult.type,
+        typeLabel: apiResult.typeLabel,
+        platform: apiResult.platform,
+        platforms: apiResult.platforms,
         genre: apiResult.genre,
-        fullGenre: apiResult.fullGenre,
         year: apiResult.year,
         poster: apiResult.poster,
         watched: false
@@ -209,7 +326,6 @@ async function addItem() {
 
 async function bulkUpload() {
     const bulkText = document.getElementById('bulkTitles').value;
-    const platformSelect = document.getElementById('bulkPlatform');
 
     if (bulkText.trim() === '') {
         alert('Please paste at least one title!');
@@ -224,14 +340,16 @@ async function bulkUpload() {
     for (let index = 0; index < lines.length; index++) {
         const title = lines[index].trim();
         if (title !== '') {
-            const apiResult = await fetchMovieDetails(title);
+            const apiResult = await fetchTMDBDetails(title);
             if (apiResult.valid) {
                 items.push({
                     id: Date.now() + index,
                     title: apiResult.title,
-                    platform: platformSelect.value,
+                    type: apiResult.type,
+                    typeLabel: apiResult.typeLabel,
+                    platform: apiResult.platform,
+                    platforms: apiResult.platforms,
                     genre: apiResult.genre,
-                    fullGenre: apiResult.fullGenre,
                     year: apiResult.year,
                     poster: apiResult.poster,
                     watched: false
@@ -249,7 +367,6 @@ async function bulkUpload() {
         document.getElementById('bulkTitles').value = '';
     }
 
-    // Provide detailed feedback on added vs failed titles
     let msg = `Added ${addedCount} titles successfully!`;
     if (failedTitles.length > 0) {
         msg += `\n\n⚠️ Could not find ${failedTitles.length} title(s):\n- ` + failedTitles.join('\n- ');
