@@ -1,14 +1,23 @@
 // ==========================================
 // 1. Firebase Configuration & Initialization
 // ==========================================
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDZUG-4XfUscT_SQHfVsA3YC0DlfCSiCvI", // Make sure your real API key is pasted here
+  apiKey: "AIzaSyDZUG-4XfUscT_SQHfVsA3YC0DlfCSiCvI",
   authDomain: "watchlist-studio-14978.firebaseapp.com",
   projectId: "watchlist-studio-14978",
   storageBucket: "watchlist-studio-14978.firebasestorage.app",
   messagingSenderId: "519504217727",
   appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
 };
+
+// Initialize Firebase
+//const app = initializeApp(firebaseConfig);
 
 if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
