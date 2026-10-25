@@ -210,8 +210,11 @@ async function fetchTMDBDetails(queryTitle) {
             const releaseYear = (match.release_date || match.first_air_date || '').split('-')[0] || 'N/A';
             const posterUrl = match.poster_path ? `https://image.tmdb.org/t/p/w200${match.poster_path}` : null;
             const ratingVal = match.vote_average ? match.vote_average.toFixed(1) : 'N/A';
+            
+            // Language Extraction
             const langCode = match.original_language || 'en';
             const languageName = LANGUAGE_NAMES[langCode] || langCode.toUpperCase();
+
             let primaryGenre = match.genre_ids ? (TMDB_GENRES[match.genre_ids[0]] || 'General') : 'General';
 
             let indiaPlatforms = [];
@@ -225,9 +228,17 @@ async function fetchTMDBDetails(queryTitle) {
             } catch (e) {}
 
             return {
-                valid: true, title: displayTitle, type: mediaType, typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
-                year: releaseYear, genre: primaryGenre, rating: ratingVal, language: languageName,
-                platform: indiaPlatforms[0] || 'Not Streaming in IN', platforms: indiaPlatforms, poster: posterUrl
+                valid: true, 
+                title: displayTitle, 
+                type: mediaType, 
+                typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
+                year: releaseYear, 
+                genre: primaryGenre, 
+                rating: ratingVal, 
+                language: languageName, // Saved Language Field
+                platform: indiaPlatforms[0] || 'Not Streaming in IN', 
+                platforms: indiaPlatforms, 
+                poster: posterUrl
             };
         }
     } catch (err) {}
@@ -245,15 +256,20 @@ function renderWatchlist() {
     const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
     const sortBy = document.getElementById('sortBy')?.value || 'default';
 
+    const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
+    const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
+
     container.innerHTML = '';
     let items = getWatchlist();
 
+    // 1. Filtering
     if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
     if (filterType !== 'All') items = items.filter(i => i.type === filterType);
     if (filterPlatform !== 'All') items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
     if (filterGenre !== 'All') items = items.filter(i => i.genre === filterGenre);
     if (filterLanguage !== 'All') items = items.filter(i => i.language === filterLanguage);
 
+    // 2. Sorting
     if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
 
     if (items.length === 0) {
@@ -261,7 +277,57 @@ function renderWatchlist() {
         return;
     }
 
-    renderGroupCards(container, items);
+    // 3. Multi-Grouping Engine
+    if (primaryGroup === 'none') {
+        renderGroupCards(container, items);
+    } else {
+        const primaryGroups = groupItemsBy(items, primaryGroup);
+        
+        Object.keys(primaryGroups).sort().forEach(pKey => {
+            const pItems = primaryGroups[pKey];
+            
+            const groupSection = document.createElement('div');
+            groupSection.className = 'mb-8 bg-slate-900 border border-slate-800 rounded-xl p-4';
+            
+            const groupHeader = document.createElement('h3');
+            groupHeader.className = 'text-lg font-bold text-sky-400 mb-4 flex items-center justify-between border-b border-slate-800 pb-2';
+            groupHeader.innerHTML = `<span>${primaryGroup.toUpperCase()}: ${pKey}</span> <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full">${pItems.length}</span>`;
+            groupSection.appendChild(groupHeader);
+
+            if (secondaryGroup === 'none' || secondaryGroup === primaryGroup) {
+                renderGroupCards(groupSection, pItems);
+            } else {
+                const secondaryGroups = groupItemsBy(pItems, secondaryGroup);
+                Object.keys(secondaryGroups).sort().forEach(sKey => {
+                    const sItems = secondaryGroups[sKey];
+                    
+                    const subHeader = document.createElement('h4');
+                    subHeader.className = 'text-sm font-semibold text-indigo-300 my-3 pl-2 border-l-2 border-indigo-500';
+                    subHeader.textContent = `${secondaryGroup.toUpperCase()}: ${sKey} (${sItems.length})`;
+                    groupSection.appendChild(subHeader);
+                    
+                    renderGroupCards(groupSection, sItems);
+                });
+            }
+            container.appendChild(groupSection);
+        });
+    }
+}
+
+function groupItemsBy(items, criteria) {
+    const groups = {};
+    items.forEach(item => {
+        let val = 'Other';
+        if (criteria === 'platform') val = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
+        else if (criteria === 'genre') val = item.genre || 'General';
+        else if (criteria === 'language') val = item.language || 'English';
+        else if (criteria === 'type') val = item.typeLabel || 'Movie';
+        else if (criteria === 'status') val = item.watched ? 'Watched' : 'To Watch';
+        
+        if (!groups[val]) groups[val] = [];
+        groups[val].push(item);
+    });
+    return groups;
 }
 
 function renderGroupCards(parentContainer, items) {
