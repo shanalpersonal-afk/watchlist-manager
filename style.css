@@ -11,6 +11,7 @@
     --prime-blue: #0284c7;
     --disney-blue: #2563eb;
     --hotstar-green: #10b981;
+    --jiocinema-pink: #ec4899;
 }
 
 * {
@@ -24,7 +25,7 @@ body {
     background-color: var(--bg-color);
     color: var(--text-main);
     padding: 20px 15px;
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -45,7 +46,15 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-/* Form Panels */
+.version-tag {
+    font-size: 12px;
+    background: var(--border-color);
+    color: var(--accent-blue);
+    padding: 3px 8px;
+    border-radius: 12px;
+    vertical-align: middle;
+}
+
 .grid-forms {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -81,12 +90,12 @@ label {
 
 input[type="text"], select, textarea {
     width: 100%;
-    padding: 10px 12px;
+    padding: 9px 12px;
     background: #0f172a;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-main);
-    font-size: 14px;
+    font-size: 13px;
     outline: none;
 }
 
@@ -100,7 +109,7 @@ textarea {
 }
 
 button {
-    padding: 10px 14px;
+    padding: 9px 14px;
     border-radius: 6px;
     border: none;
     font-size: 13px;
@@ -129,7 +138,38 @@ button {
     color: white;
 }
 
-/* Toolbar & Grouping Options */
+/* Progress Indicator */
+.progress-container {
+    margin-top: 12px;
+}
+
+.progress-status {
+    font-size: 11px;
+    color: var(--accent-blue);
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-bar-bg {
+    width: 100%;
+    height: 8px;
+    background: #0f172a;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(to right, var(--accent-blue), var(--accent-indigo));
+    transition: width 0.2s ease;
+    border-radius: 3px;
+}
+
+/* Multi-Filter Toolbar */
 .toolbar {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -142,15 +182,15 @@ button {
 }
 
 .toolbar-top {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    align-items: flex-end;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
 }
 
-.toolbar-group {
-    flex: 1;
-    min-width: 150px;
+.toolbar-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
 }
 
 .grouping-bar {
@@ -190,14 +230,14 @@ button {
 }
 
 .group-header {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--accent-blue);
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: var(--card-bg);
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
     cursor: pointer;
@@ -211,7 +251,7 @@ button {
 .group-title-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .chevron {
@@ -228,17 +268,17 @@ button {
 }
 
 .group-count {
-    font-size: 12px;
+    font-size: 11px;
     background: var(--border-color);
     color: var(--text-main);
     padding: 2px 8px;
     border-radius: 10px;
 }
 
-/* Card Layout & Poster Image Styling */
+/* Card Grid Layout */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 12px;
     margin-top: 10px;
 }
@@ -250,7 +290,6 @@ button {
     padding: 12px;
     display: flex;
     gap: 12px;
-    position: relative;
     transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -299,24 +338,27 @@ button {
 }
 
 .card-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     line-height: 1.3;
 }
 
 .card-meta {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
     margin-top: 3px;
 }
 
-.api-details {
-    font-size: 11px;
+.type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 10px;
+    background: var(--border-color);
     color: var(--accent-blue);
-    margin-top: 2px;
+    border-radius: 4px;
+    margin-right: 4px;
 }
 
-/* Badges */
 .badge {
     display: inline-block;
     padding: 2px 8px;
@@ -330,7 +372,8 @@ button {
 .badge-netflix { background: var(--netflix-red); }
 .badge-prime { background: var(--prime-blue); }
 .badge-disney { background: var(--disney-blue); }
-.badge-hotstar { background: var(--hotstar-green); }
+.badge-hotstar { background: var(--disney-blue); }
+.badge-jiocinema { background: var(--jiocinema-pink); }
 
 .card-footer {
     display: flex;
@@ -366,17 +409,8 @@ button {
 }
 
 @media (max-width: 768px) {
-    body {
-        padding: 15px 10px;
-    }
-    .grid-forms {
-        grid-template-columns: 1fr;
-    }
-    .toolbar-top {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .card-grid {
-        grid-template-columns: 1fr;
-    }
+    body { padding: 15px 10px; }
+    .grid-forms { grid-template-columns: 1fr; }
+    .toolbar-top { grid-template-columns: 1fr 1fr; }
+    .card-grid { grid-template-columns: 1fr; }
 }

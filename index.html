@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio - Phase 6</title>
+    <title>Watchlist Studio - v2.2.0</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <header>
-        <h1>🍿 Watchlist Studio</h1>
+        <h1>🍿 Watchlist Studio <span class="version-tag">v2.2.0</span></h1>
     </header>
 
     <div class="grid-forms">
@@ -18,18 +18,9 @@
             <h3>Add Single Title</h3>
             <div class="form-group">
                 <label for="title">Title</label>
-                <input type="text" id="title" placeholder="e.g., Oppenheimer">
+                <input type="text" id="title" placeholder="e.g., Oppenheimer or Sacred Games">
             </div>
-            <div class="form-group">
-                <label for="platform">Streaming Platform</label>
-                <select id="platform">
-                    <option value="Netflix">Netflix</option>
-                    <option value="Prime Video">Prime Video</option>
-                    <option value="Disney+">Disney+</option>
-                    <option value="Hotstar">Hotstar</option>
-                </select>
-            </div>
-            <button class="btn-primary" onclick="addItem()">Add to Watchlist</button>
+            <button class="btn-primary" onclick="addItem()">Add to Watchlist (Auto-Detect Provider)</button>
         </div>
 
         <!-- Bulk Upload Panel -->
@@ -37,27 +28,52 @@
             <h3>Bulk Upload</h3>
             <div class="form-group">
                 <label for="bulkTitles">Paste Titles (one per line)</label>
-                <textarea id="bulkTitles" placeholder="The Dark Knight&#10;Interstellar&#10;Dune"></textarea>
+                <textarea id="bulkTitles" placeholder="The Dark Knight&#10;Mirzapur&#10;Dune"></textarea>
             </div>
-            <div class="form-group">
-                <label for="bulkPlatform">Default Platform</label>
-                <select id="bulkPlatform">
-                    <option value="Netflix">Netflix</option>
-                    <option value="Prime Video">Prime Video</option>
-                    <option value="Disney+">Disney+</option>
-                    <option value="Hotstar">Hotstar</option>
-                </select>
+            <button class="btn-primary" id="btnBulkUpload" onclick="bulkUpload()">Process Batch</button>
+            <div class="progress-container" id="bulkProgressContainer" style="display: none;">
+                <div class="progress-status" id="bulkProgressStatus">Ready</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="bulkProgressBar" style="width: 0%;"></div>
+                </div>
             </div>
-            <button class="btn-primary" onclick="bulkUpload()">Process Batch</button>
         </div>
     </div>
 
-    <!-- Toolbar & Grouping Options -->
+    <!-- Multi-Filter Toolbar -->
     <div class="toolbar">
         <div class="toolbar-top">
             <div class="toolbar-group" style="flex: 2;">
                 <label for="searchQuery">🔍 Search Watchlist</label>
-                <input type="text" id="searchQuery" placeholder="Filter titles dynamically..." oninput="renderWatchlist()">
+                <input type="text" id="searchQuery" placeholder="Search by keyword..." oninput="renderWatchlist()">
+            </div>
+            <div class="toolbar-group">
+                <label for="filterType">Type Filter</label>
+                <select id="filterType" onchange="renderWatchlist()">
+                    <option value="All">All Types</option>
+                    <option value="movie">Movies Only</option>
+                    <option value="tv">TV Shows Only</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <label for="filterPlatform">Platform Filter</label>
+                <select id="filterPlatform" onchange="renderWatchlist()">
+                    <option value="All">All Platforms</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <label for="filterGenre">Genre Filter</label>
+                <select id="filterGenre" onchange="renderWatchlist()">
+                    <option value="All">All Genres</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <label for="filterStatus">Status Filter</label>
+                <select id="filterStatus" onchange="renderWatchlist()">
+                    <option value="All">All Statuses</option>
+                    <option value="towatch">To Watch</option>
+                    <option value="watched">Watched</option>
+                </select>
             </div>
             <div class="toolbar-group">
                 <label for="sortBy">Sort Order</label>
@@ -67,18 +83,20 @@
                     <option value="title-desc">Title (Z-A)</option>
                 </select>
             </div>
-            <div class="toolbar-group" style="display: flex; gap: 8px; align-items: flex-end;">
-                <button class="btn-warning" onclick="deleteSelectedItems()" style="flex: 1;">Delete Selected</button>
-                <button class="btn-danger" onclick="clearAllItems()" style="flex: 1;">Delete All</button>
-            </div>
         </div>
 
-        <!-- Multi-Grouping Mode Selectors -->
+        <div class="toolbar-actions">
+            <button class="btn-warning" onclick="deleteSelectedItems()">Delete Selected</button>
+            <button class="btn-danger" onclick="clearAllItems()">Delete All</button>
+        </div>
+
+        <!-- Multi-Grouping Board Views -->
         <div class="grouping-bar">
             <span class="group-tab-label">Group Views:</span>
             <button class="tab-btn active" id="tab-none" onclick="setGrouping('none')">All (List View)</button>
-            <button class="tab-btn" id="tab-genre" onclick="setGrouping('genre')">Group by API Genre</button>
+            <button class="tab-btn" id="tab-genre" onclick="setGrouping('genre')">Group by Genre</button>
             <button class="tab-btn" id="tab-platform" onclick="setGrouping('platform')">Group by Platform</button>
+            <button class="tab-btn" id="tab-type" onclick="setGrouping('type')">Group by Type</button>
             <button class="tab-btn" id="tab-status" onclick="setGrouping('status')">Group by Status</button>
         </div>
     </div>

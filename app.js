@@ -2,6 +2,38 @@
 const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
 const OMDB_API_KEY = "trilogy";
 
+const TMDB_GENRE_MAP = {
+    // Movie genres
+    28: "Action",
+    12: "Adventure",
+    16: "Animation",
+    35: "Comedy",
+    80: "Crime",
+    99: "Documentary",
+    18: "Drama",
+    10751: "Family",
+    14: "Fantasy",
+    36: "History",
+    27: "Horror",
+    10402: "Music",
+    9648: "Mystery",
+    10749: "Romance",
+    878: "Science Fiction",
+    10770: "TV Movie",
+    53: "Thriller",
+    10752: "War",
+    37: "Western",
+    // TV genres
+    10759: "Action & Adventure",
+    10762: "Kids",
+    10763: "News",
+    10764: "Reality",
+    10765: "Sci-Fi & Fantasy",
+    10766: "Soap",
+    10767: "Talk",
+    10768: "War & Politics"
+};
+
 let activeGrouping = 'none';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,6 +68,24 @@ function getPlatformBadgeClass(platform) {
     return 'badge-default';
 }
 
+function normalizePlatformName(name) {
+    if (!name) return '';
+    const trimmed = name.trim();
+    const lower = trimmed.toLowerCase();
+
+    // Disney / Hotstar variations (e.g., "Disney+ Hotstar", "Hotstar", "Disney Plus", "JioHotstar")
+    if (lower.includes('hotstar') || lower.includes('disney')) {
+        return 'Disney+ Hotstar';
+    }
+
+    // Amazon / Prime Video variations (e.g., "Amazon Prime Video", "Amazon Prime Video with Ads", "Prime Video Channels")
+    if (lower.includes('prime video') || lower.includes('amazon prime') || lower.includes('amazon video') || lower.endsWith('amazon channel')) {
+        return 'Prime Video';
+    }
+
+    return trimmed;
+}
+
 function populateFilterDropdowns() {
     const items = getWatchlist();
     
@@ -51,7 +101,10 @@ function populateFilterDropdowns() {
 
     // Dynamic Platforms
     const platformSelect = document.getElementById('filterPlatform');
-    const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
+    const allPlatforms = items.flatMap(i => {
+        const rawList = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
+        return rawList.map(p => normalizePlatformName(p));
+    }).filter(Boolean);
     const uniquePlatforms = [...new Set(allPlatforms)].sort();
     platformSelect.innerHTML = '<option value="All">All Platforms</option>';
     uniquePlatforms.forEach(p => {
@@ -100,13 +153,18 @@ async function fetchTMDBDetails(queryTitle) {
                 const providerData = await providerRes.json();
                 
                 if (providerData.results && providerData.results.IN && providerData.results.IN.flatrate) {
-                    indiaPlatforms = providerData.results.IN.flatrate.map(p => p.provider_name);
+                    const normalizedList = providerData.results.IN.flatrate
+                        .map(p => normalizePlatformName(p.provider_name))
+                        .filter(Boolean);
+                    indiaPlatforms = [...new Set(normalizedList)];
                 }
             } catch (pErr) {
                 console.warn("Watch provider lookup skipped for IN:", pErr);
             }
 
             const primaryPlatform = indiaPlatforms.length > 0 ? indiaPlatforms[0] : 'Not Streaming in IN';
+            const firstGenreId = (match.genre_ids && match.genre_ids.length > 0) ? match.genre_ids[0] : null;
+            const resolvedGenre = (firstGenreId && TMDB_GENRE_MAP[firstGenreId]) ? TMDB_GENRE_MAP[firstGenreId] : (mediaType === 'tv' ? 'TV Series' : 'Cinema');
 
             return {
                 valid: true,
@@ -114,7 +172,7 @@ async function fetchTMDBDetails(queryTitle) {
                 type: mediaType,
                 typeLabel: mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
                 year: releaseYear,
-                genre: mediaType === 'tv' ? 'TV Series' : 'Cinema',
+                genre: resolvedGenre,
                 platform: primaryPlatform,
                 platforms: indiaPlatforms.length > 0 ? indiaPlatforms : ['Not Streaming in IN'],
                 poster: posterUrl
@@ -175,7 +233,10 @@ function renderWatchlist() {
         items = items.filter(i => i.type === filterType);
     }
     if (filterPlatform !== 'All') {
-        items = items.filter(i => (i.platforms || [i.platform]).includes(filterPlatform));
+        items = items.filter(i => {
+            const platforms = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
+            return platforms.map(p => normalizePlatformName(p)).includes(filterPlatform);
+        });
     }
     if (filterGenre !== 'All') {
         items = items.filter(i => i.genre === filterGenre);
@@ -205,9 +266,16 @@ function renderWatchlist() {
         if (movies.length > 0) renderGroup(container, '🎬 Movies', movies, 'movies');
         if (series.length > 0) renderGroup(container, '📺 TV Shows', series, 'series');
     } else if (activeGrouping === 'platform') {
-        const platforms = [...new Set(items.flatMap(i => i.platforms || [i.platform]))].sort();
+        const allPlatforms = items.flatMap(i => {
+            const raw = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
+            return raw.map(p => normalizePlatformName(p));
+        }).filter(Boolean);
+        const platforms = [...new Set(allPlatforms)].sort();
         platforms.forEach(platform => {
-            const groupItems = items.filter(i => (i.platforms || [i.platform]).includes(platform));
+            const groupItems = items.filter(i => {
+                const itemPlatforms = (i.platforms && i.platforms.length > 0) ? i.platforms : (i.platform ? [i.platform] : []);
+                return itemPlatforms.map(p => normalizePlatformName(p)).includes(platform);
+            });
             if (groupItems.length > 0) {
                 renderGroup(container, platform, groupItems, platform);
             }
@@ -247,7 +315,8 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
         const card = document.createElement('div');
         card.className = `movie-card ${item.watched ? 'watched' : ''}`;
         
-        const mainPlatform = (item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform;
+        const rawPlatform = (item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform;
+        const mainPlatform = normalizePlatformName(rawPlatform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
 
         const posterHtml = item.poster 
@@ -269,6 +338,7 @@ function renderGroup(parentContainer, groupTitle, items, groupKey) {
                     </div>
                     <div class="card-meta">
                         <span class="type-badge">${item.typeLabel || '🎬 Movie'}</span>
+                        ${item.genre ? `<span class="type-badge">${item.genre}</span>` : ''}
                         <span>Release: <strong>${item.year}</strong></span>
                     </div>
                 </div>
@@ -332,14 +402,37 @@ async function bulkUpload() {
         return;
     }
 
-    const lines = bulkText.split('\n');
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l !== '');
+    if (lines.length === 0) {
+        alert('Please paste at least one valid title!');
+        return;
+    }
+
+    const progressContainer = document.getElementById('bulkProgressContainer');
+    const progressStatus = document.getElementById('bulkProgressStatus');
+    const progressBar = document.getElementById('bulkProgressBar');
+    const bulkButton = document.getElementById('btnBulkUpload') || document.querySelector('button[onclick="bulkUpload()"]');
+
+    if (progressContainer) progressContainer.style.display = 'block';
+    if (bulkButton) bulkButton.disabled = true;
+
     let items = getWatchlist();
     let addedCount = 0;
     let failedTitles = [];
 
-    for (let index = 0; index < lines.length; index++) {
-        const title = lines[index].trim();
-        if (title !== '') {
+    try {
+        for (let index = 0; index < lines.length; index++) {
+            const title = lines[index];
+            const currentStep = index + 1;
+            const percent = Math.round((currentStep / lines.length) * 100);
+
+            if (progressStatus) {
+                progressStatus.textContent = `Processing ${currentStep} / ${lines.length}: "${title}"...`;
+            }
+            if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+            }
+
             const apiResult = await fetchTMDBDetails(title);
             if (apiResult.valid) {
                 items.push({
@@ -359,6 +452,11 @@ async function bulkUpload() {
                 failedTitles.push(title);
             }
         }
+    } finally {
+        if (progressContainer) progressContainer.style.display = 'none';
+        if (progressBar) progressBar.style.width = '0%';
+        if (progressStatus) progressStatus.textContent = 'Ready';
+        if (bulkButton) bulkButton.disabled = false;
     }
 
     if (addedCount > 0) {
