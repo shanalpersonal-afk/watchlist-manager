@@ -39,6 +39,7 @@ const LANGUAGE_NAMES = {
     ml: "Malayalam", kn: "Kannada", es: "Spanish", fr: "French", ja: "Japanese"
 };
 
+let unsubscribeWatchlist = null;
 let currentWatchlistItems = [];
 let currentUser = null;
 const selectedDocIds = new Set();
@@ -94,6 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 setupFirebaseListener();
             } else {
                 currentUser = null;
+                if (unsubscribeWatchlist) {
+                    unsubscribeWatchlist();
+                    unsubscribeWatchlist = null;
+                }
+                currentWatchlistItems = [];
+                selectedDocIds.clear();
+                renderWatchlist();
                 if (splash) splash.classList.remove('hidden');
                 if (dashboard) dashboard.classList.add('hidden');
             }
@@ -216,19 +224,25 @@ function logoutUser() {
 }
 
 function setupFirebaseListener() {
-    if (db) {
-        db.collection('watchlist').onSnapshot(snapshot => {
-            currentWatchlistItems = [];
-            snapshot.forEach(doc => {
-                currentWatchlistItems.push({ docId: doc.id, ...doc.data() });
+    if (unsubscribeWatchlist) {
+        unsubscribeWatchlist();
+        unsubscribeWatchlist = null;
+    }
+    if (db && currentUser) {
+        unsubscribeWatchlist = db.collection('watchlist')
+            .where('userId', '==', currentUser.uid)
+            .onSnapshot(snapshot => {
+                currentWatchlistItems = [];
+                snapshot.forEach(doc => {
+                    currentWatchlistItems.push({ docId: doc.id, ...doc.data() });
+                });
+                const existingIds = new Set(currentWatchlistItems.map(item => item.docId));
+                selectedDocIds.forEach(docId => {
+                    if (!existingIds.has(docId)) selectedDocIds.delete(docId);
+                });
+                populateFilterDropdowns();
+                renderWatchlist();
             });
-            const existingIds = new Set(currentWatchlistItems.map(item => item.docId));
-            selectedDocIds.forEach(docId => {
-                if (!existingIds.has(docId)) selectedDocIds.delete(docId);
-            });
-            populateFilterDropdowns();
-            renderWatchlist();
-        });
     }
 }
 
@@ -572,6 +586,11 @@ async function refreshMetadata(docId) {
 // 5. Data Mutations (Watched / Add / Delete)
 // ==========================================
 async function addItem() {
+    if (!currentUser) {
+        alert('Please sign in before adding titles.');
+        return;
+    }
+
     const titleInput = document.getElementById('title');
     const rawTitle = titleInput ? titleInput.value.trim() : '';
 
@@ -599,7 +618,8 @@ async function addItem() {
         year: apiResult.year,
         poster: apiResult.poster,
         watched: false,
-        addedBy: currentUser ? (currentUser.displayName || currentUser.email) : 'Guest'
+        addedBy: currentUser.displayName || currentUser.email,
+        userId: currentUser.uid
     };
 
     if (db) {
@@ -620,6 +640,12 @@ async function bulkUploadItems() {
     const statusText = document.getElementById('bulkStatusText');
     const uploadButton = document.getElementById('bulkUploadButton');
     const titles = [...new Set((textarea?.value || '').split(/[\n,]+/).map(title => title.trim()).filter(Boolean))];
+
+    if (!currentUser) {
+        if (statusText) statusText.textContent = 'Please sign in before uploading titles.';
+        if (progressContainer) progressContainer.classList.remove('hidden');
+        return;
+    }
 
     if (titles.length === 0) {
         if (statusText) statusText.textContent = 'Enter at least one title to upload.';
@@ -652,7 +678,8 @@ async function bulkUploadItems() {
                     await db.collection('watchlist').add({
                         ...item,
                         watched: false,
-                        addedBy: currentUser ? (currentUser.displayName || currentUser.email) : 'Guest'
+                        addedBy: currentUser.displayName || currentUser.email,
+                        userId: currentUser.uid
                     });
                     added += 1;
                 }
