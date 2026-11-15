@@ -43,6 +43,19 @@ let currentWatchlistItems = [];
 let currentUser = null;
 const selectedDocIds = new Set();
 let renderedDocIds = new Set();
+let activeTourStep = -1;
+let tourOpenedBulkPanel = false;
+let tourOpenedFilterDrawer = false;
+let tourTarget = null;
+let tourOriginalStyles = null;
+
+const WATCHLIST_TOUR_STEPS = [
+    { selector: '#title', title: 'Add a title', description: 'Search for a movie or TV show here, then add it to your watchlist.' },
+    { selector: '#bulkUploadToggle', title: 'Bulk upload', description: 'Open this panel to add several titles from a list, one title per line.' },
+    { selector: '#filterDrawer', title: 'Filter your watchlist', description: 'Use filters, grouping, and sorting to find titles. On a phone, this drawer opens for the tour.' },
+    { selector: '#primaryGroupSelect', title: 'Group your titles', description: 'Choose a primary group to organize your watchlist into collapsible sections.' },
+    { selector: '#watchlistDisplay', title: 'Your watchlist', description: 'Your titles appear here. Select a card to use the batch actions above.' }
+];
 
 // ==========================================
 // 2. Auth State & Lifecycle Event Listeners
@@ -55,6 +68,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const signOutBtn = document.getElementById('signOutBtn');
     if (signOutBtn) signOutBtn.addEventListener('click', logoutUser);
+
+    const startTourBtn = document.getElementById('startTourBtn');
+    if (startTourBtn) startTourBtn.addEventListener('click', startWatchlistTour);
+    const tourNextBtn = document.getElementById('tourNextBtn');
+    if (tourNextBtn) tourNextBtn.addEventListener('click', advanceWatchlistTour);
+    const tourSkipBtn = document.getElementById('tourSkipBtn');
+    if (tourSkipBtn) tourSkipBtn.addEventListener('click', endWatchlistTour);
+    window.addEventListener('resize', positionTourTooltip);
+    window.addEventListener('scroll', positionTourTooltip, { passive: true });
 
     if (auth) {
         auth.onAuthStateChanged(user => {
@@ -78,6 +100,105 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+function startWatchlistTour() {
+    endWatchlistTour();
+    const bulkToggle = document.getElementById('bulkUploadToggle');
+    const bulkPanel = bulkToggle?.closest('details');
+    if (bulkPanel && !bulkPanel.open) {
+        tourOpenedBulkPanel = true;
+        bulkPanel.open = true;
+    }
+    activeTourStep = 0;
+    showWatchlistTourStep();
+}
+
+function showWatchlistTourStep() {
+    const step = WATCHLIST_TOUR_STEPS[activeTourStep];
+    const tooltip = document.getElementById('tourTooltip');
+    if (!step || !tooltip) return endWatchlistTour();
+
+    if (tourTarget && tourOriginalStyles) {
+        Object.assign(tourTarget.style, tourOriginalStyles);
+    }
+    tourTarget = document.querySelector(step.selector);
+    if (!tourTarget) return advanceWatchlistTour();
+
+    tourOriginalStyles = {
+        outline: tourTarget.style.outline,
+        outlineOffset: tourTarget.style.outlineOffset,
+        position: tourTarget.style.position,
+        zIndex: tourTarget.style.zIndex
+    };
+    tourTarget.style.outline = '3px solid #38bdf8';
+    tourTarget.style.outlineOffset = '4px';
+    if (getComputedStyle(tourTarget).position === 'static') tourTarget.style.position = 'relative';
+    tourTarget.style.zIndex = '40';
+
+    if (step.selector === '#filterDrawer' && window.innerWidth < 768 && getComputedStyle(tourTarget).display === 'none') {
+        tourOpenedFilterDrawer = true;
+        tourTarget.classList.remove('hidden');
+    }
+
+    document.getElementById('tourStepCount').textContent = `Step ${activeTourStep + 1} of ${WATCHLIST_TOUR_STEPS.length}`;
+    document.getElementById('tourTitle').textContent = step.title;
+    document.getElementById('tourDescription').textContent = step.description;
+    const nextButton = document.getElementById('tourNextBtn');
+    nextButton.textContent = activeTourStep === WATCHLIST_TOUR_STEPS.length - 1 ? 'Finish' : 'Next';
+    tooltip.classList.remove('hidden');
+
+    tourTarget.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    window.setTimeout(positionTourTooltip, 350);
+}
+
+function positionTourTooltip() {
+    if (activeTourStep < 0 || !tourTarget) return;
+    const tooltip = document.getElementById('tourTooltip');
+    if (!tooltip || tooltip.classList.contains('hidden')) return;
+
+    const targetRect = tourTarget.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const margin = 12;
+    const left = Math.max(margin, Math.min(targetRect.left, window.innerWidth - tooltipRect.width - margin));
+    const topBelow = targetRect.bottom + margin;
+    const top = topBelow + tooltipRect.height <= window.innerHeight - margin
+        ? topBelow
+        : Math.max(margin, targetRect.top - tooltipRect.height - margin);
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+}
+
+function advanceWatchlistTour() {
+    activeTourStep += 1;
+    if (activeTourStep >= WATCHLIST_TOUR_STEPS.length) {
+        endWatchlistTour();
+        return;
+    }
+    showWatchlistTourStep();
+}
+
+function endWatchlistTour() {
+    if (tourTarget && tourOriginalStyles) {
+        Object.assign(tourTarget.style, tourOriginalStyles);
+    }
+    const tooltip = document.getElementById('tourTooltip');
+    if (tooltip) {
+        tooltip.classList.add('hidden');
+        tooltip.style.left = '';
+        tooltip.style.top = '';
+    }
+    if (tourOpenedBulkPanel) {
+        const panel = document.getElementById('bulkUploadToggle')?.closest('details');
+        if (panel) panel.open = false;
+    }
+    if (tourOpenedFilterDrawer) document.getElementById('filterDrawer')?.classList.add('hidden');
+
+    activeTourStep = -1;
+    tourTarget = null;
+    tourOriginalStyles = null;
+    tourOpenedBulkPanel = false;
+    tourOpenedFilterDrawer = false;
+}
 
 function loginWithGoogle() {
     if (!auth) {
