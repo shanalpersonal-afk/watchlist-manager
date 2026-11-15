@@ -113,6 +113,23 @@ function getItemLanguage(item) {
     return item.language || 'Unknown Language';
 }
 
+function getGroupKey(item, groupBy) {
+    switch (groupBy) {
+        case 'platform':
+            return normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
+        case 'genre':
+            return item.genre || 'Unknown Genre';
+        case 'language':
+            return getItemLanguage(item);
+        case 'type':
+            return item.type === 'tv' ? 'TV Shows' : 'Movies';
+        case 'status':
+            return item.watched ? 'Watched' : 'To Watch';
+        default:
+            return '';
+    }
+}
+
 // ==========================================
 // 3. Theme Switcher & UI Helpers
 // ==========================================
@@ -267,6 +284,8 @@ function renderWatchlist() {
     const filterGenre = document.getElementById('filterGenre')?.value || 'All';
     const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
     const sortBy = document.getElementById('sortBy')?.value || 'default';
+    const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
+    const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
 
     container.innerHTML = '';
     let items = getWatchlist();
@@ -286,7 +305,51 @@ function renderWatchlist() {
         return;
     }
 
-    renderGroupCards(container, items);
+    const activeGroups = [...new Set([primaryGroup, secondaryGroup].filter(group => group !== 'none'))];
+    if (activeGroups.length === 0) {
+        renderGroupCards(container, items);
+    } else if (activeGroups.length === 1) {
+        renderGroupedCards(container, items, activeGroups[0]);
+    } else {
+        renderGroupedCards(container, items, primaryGroup, secondaryGroup);
+    }
+}
+
+function renderGroupedCards(parentContainer, items, primaryGroup, secondaryGroup = null) {
+    const groupItems = (groupBy, groupedItems) => {
+        const groups = new Map();
+        groupedItems.forEach(item => {
+            const key = getGroupKey(item, groupBy);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(item);
+        });
+        return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+    };
+
+    const makeSection = (label, level) => {
+        const section = document.createElement('details');
+        section.open = true;
+        section.className = level === 1 ? 'group-section mb-4' : 'group-section ml-3 mb-3';
+        const heading = document.createElement('summary');
+        heading.className = 'cursor-pointer select-none font-bold text-slate-800 dark:text-slate-100 bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-4 py-2 mb-2';
+        heading.textContent = label;
+        section.appendChild(heading);
+        return section;
+    };
+
+    groupItems(primaryGroup, items).forEach(([primaryKey, primaryItems]) => {
+        const primarySection = makeSection(primaryKey, 1);
+        if (secondaryGroup) {
+            groupItems(secondaryGroup, primaryItems).forEach(([secondaryKey, secondaryItems]) => {
+                const secondarySection = makeSection(secondaryKey, 2);
+                renderGroupCards(secondarySection, secondaryItems);
+                primarySection.appendChild(secondarySection);
+            });
+        } else {
+            renderGroupCards(primarySection, primaryItems);
+        }
+        parentContainer.appendChild(primarySection);
+    });
 }
 
 function renderGroupCards(parentContainer, items) {
