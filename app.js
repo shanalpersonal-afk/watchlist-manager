@@ -109,6 +109,10 @@ function getWatchlist() {
     return currentWatchlistItems;
 }
 
+function getItemLanguage(item) {
+    return item.language || 'Unknown Language';
+}
+
 // ==========================================
 // 3. Theme Switcher & UI Helpers
 // ==========================================
@@ -159,26 +163,36 @@ function populateFilterDropdowns() {
     // Genres
     const genreSelect = document.getElementById('filterGenre');
     if (genreSelect) {
+        const selectedGenre = genreSelect.value;
         const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
         genreSelect.innerHTML = '<option value="All">All Genres</option>';
         genres.forEach(g => { genreSelect.innerHTML += `<option value="${g}">${g}</option>`; });
+        genreSelect.value = [...genreSelect.options].some(option => option.value === selectedGenre) ? selectedGenre : 'All';
     }
 
     // Languages (Populates dynamically!)
     const langSelect = document.getElementById('filterLanguage');
     if (langSelect) {
-        const languages = [...new Set(items.map(i => i.language).filter(Boolean))].sort();
+        const selectedLanguage = langSelect.value;
+        const languages = [...new Set(items.map(getItemLanguage))].sort((a, b) => {
+            if (a === 'Unknown Language') return 1;
+            if (b === 'Unknown Language') return -1;
+            return a.localeCompare(b);
+        });
         langSelect.innerHTML = '<option value="All">All Languages</option>';
         languages.forEach(l => { langSelect.innerHTML += `<option value="${l}">${l}</option>`; });
+        langSelect.value = [...langSelect.options].some(option => option.value === selectedLanguage) ? selectedLanguage : 'All';
     }
 
     // Platforms
     const platformSelect = document.getElementById('filterPlatform');
     if (platformSelect) {
+        const selectedPlatform = platformSelect.value;
         const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
         const uniquePlatforms = [...new Set(allPlatforms.map(normalizePlatformName))].sort();
         platformSelect.innerHTML = '<option value="All">All Platforms</option>';
         uniquePlatforms.forEach(p => { platformSelect.innerHTML += `<option value="${p}">${p}</option>`; });
+        platformSelect.value = [...platformSelect.options].some(option => option.value === selectedPlatform) ? selectedPlatform : 'All';
     }
 }
 
@@ -210,8 +224,8 @@ async function fetchTMDBDetails(queryTitle) {
             const ratingVal = match.vote_average ? match.vote_average.toFixed(1) : 'N/A';
             
             // Language Extraction
-            const langCode = match.original_language || 'en';
-            const languageName = LANGUAGE_NAMES[langCode] || langCode.toUpperCase();
+            const langCode = match.original_language;
+            const languageName = langCode ? (LANGUAGE_NAMES[langCode] || langCode.toUpperCase()) : 'Unknown Language';
 
             let primaryGenre = match.genre_ids ? (TMDB_GENRES[match.genre_ids[0]] || 'General') : 'General';
 
@@ -261,9 +275,11 @@ function renderWatchlist() {
     if (filterType !== 'All') items = items.filter(i => i.type === filterType);
     if (filterPlatform !== 'All') items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
     if (filterGenre !== 'All') items = items.filter(i => i.genre === filterGenre);
-    if (filterLanguage !== 'All') items = items.filter(i => i.language === filterLanguage);
+    if (filterLanguage !== 'All') items = items.filter(i => getItemLanguage(i) === filterLanguage);
 
     if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
+    if (sortBy === 'title-asc') items.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    if (sortBy === 'title-desc') items.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
 
     if (items.length === 0) {
         container.innerHTML = `<div class="text-center py-12 text-slate-400 font-medium">No matching titles found.</div>`;
@@ -285,17 +301,19 @@ function renderGroupCards(parentContainer, items) {
         const badgeClass = getPlatformBadgeClass(mainPlatform);
         const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-200 dark:bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
 
+        const needsMetadata = !item.language || !item.rating || item.rating === 'N/A';
         card.innerHTML = `
             <div class="relative">
                 ${posterHtml}
                 <span class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full text-white uppercase shadow-md ${badgeClass}">${mainPlatform}</span>
                 <span class="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold rounded bg-slate-950/80 text-amber-300 backdrop-blur-sm">⭐ ${item.rating || 'N/A'}</span>
+                ${needsMetadata ? `<button title="Refresh metadata" aria-label="Refresh metadata for ${item.title}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-slate-950/80 text-white hover:bg-sky-600" onclick="refreshMetadata('${item.docId}')">↻</button>` : ''}
             </div>
             <div class="p-3 flex-1 flex flex-col justify-between">
                 <div>
                     <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 leading-snug line-clamp-2 ${item.watched ? 'line-through text-slate-400' : ''}">${item.title}</h4>
                     <div class="text-xs text-slate-500 dark:text-slate-400 space-x-2 mt-1">
-                        <span>🌐 ${item.language || 'EN'}</span>
+                        <span>🌐 ${item.language || 'Unknown Language'}</span>
                         <span>🗓️ ${item.year || 'N/A'}</span>
                     </div>
                 </div>
@@ -311,6 +329,20 @@ function renderGroupCards(parentContainer, items) {
     });
 
     parentContainer.appendChild(grid);
+}
+
+async function refreshMetadata(docId) {
+    const item = currentWatchlistItems.find(i => i.docId === docId);
+    if (!db || !item) return;
+
+    const metadata = await fetchTMDBDetails(item.title);
+    if (!metadata.valid) {
+        alert(metadata.error);
+        return;
+    }
+
+    const { valid, ...updates } = metadata;
+    await db.collection('watchlist').doc(docId).update(updates);
 }
 
 // ==========================================
