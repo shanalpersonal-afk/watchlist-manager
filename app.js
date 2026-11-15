@@ -22,7 +22,7 @@ if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
 const db = (typeof firebase !== 'undefined') ? firebase.firestore() : null;
 const auth = (typeof firebase !== 'undefined') ? firebase.auth() : null;
 
-const TMDB_API_KEY = "15d16000751e5057088f1798720994a5";
+const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
 
 const TMDB_GENRES = {
     10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
