@@ -61,6 +61,21 @@
                 <button onclick="addItem()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors">+ Add Title</button>
             </div>
 
+            <details class="border-t border-slate-200 dark:border-slate-800 pt-3">
+                <summary class="cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300">Bulk Upload</summary>
+                <div class="mt-3 space-y-3">
+                    <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line.</label>
+                    <textarea id="bulkTitles" rows="4" placeholder="Inception&#10;The Matrix&#10;Sacred Games" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
+                    <button id="bulkUploadButton" onclick="bulkUploadItems()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Upload Titles</button>
+                    <div id="bulkProgressContainer" class="hidden space-y-1" aria-live="polite">
+                        <div class="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                            <div id="bulkProgressBar" class="h-full w-0 bg-sky-500 transition-all duration-200"></div>
+                        </div>
+                        <p id="bulkStatusText" class="text-xs text-slate-500 dark:text-slate-400"></p>
+                    </div>
+                </div>
+            </details>
+
             <div class="flex flex-wrap gap-4 items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
                 <input type="text" id="searchQuery" placeholder="🔍 Search existing titles..." oninput="renderWatchlist()" class="bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm flex-1 max-w-xs">
                 <button id="toggleFilterDrawerBtn" onclick="toggleFilterDrawer()" class="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700">🎛️ Filters & Views</button>
@@ -97,6 +112,17 @@
                     <select id="sortBy" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="default">Default</option><option value="rating-desc">⭐ Highest Rating</option><option value="title-asc">Title (A-Z)</option><option value="title-desc">Title (Z-A)</option></select>
                 </div>
             </div>
+        </div>
+
+        <!-- Batch Actions -->
+        <div class="flex flex-wrap items-center gap-3 mb-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+            <label class="flex items-center gap-2 text-sm font-semibold">
+                <input id="selectAllCheckbox" type="checkbox" onchange="toggleSelectAll(this.checked)" class="accent-sky-500">
+                Select All
+            </label>
+            <span id="selectedCount" class="text-xs text-slate-500 dark:text-slate-400">0 selected</span>
+            <button onclick="deleteSelected()" class="rounded bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700">Delete Selected</button>
+            <button onclick="deleteAll()" class="rounded border border-rose-300 dark:border-rose-800 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950">Delete All</button>
         </div>
 
         <!-- Watchlist Display Grid -->

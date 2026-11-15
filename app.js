@@ -41,6 +41,8 @@ const LANGUAGE_NAMES = {
 
 let currentWatchlistItems = [];
 let currentUser = null;
+const selectedDocIds = new Set();
+let renderedDocIds = new Set();
 
 // ==========================================
 // 2. Auth State & Lifecycle Event Listeners
@@ -98,6 +100,10 @@ function setupFirebaseListener() {
             currentWatchlistItems = [];
             snapshot.forEach(doc => {
                 currentWatchlistItems.push({ docId: doc.id, ...doc.data() });
+            });
+            const existingIds = new Set(currentWatchlistItems.map(item => item.docId));
+            selectedDocIds.forEach(docId => {
+                if (!existingIds.has(docId)) selectedDocIds.delete(docId);
             });
             populateFilterDropdowns();
             renderWatchlist();
@@ -288,6 +294,7 @@ function renderWatchlist() {
     const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
 
     container.innerHTML = '';
+    renderedDocIds = new Set();
     let items = getWatchlist();
 
     if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
@@ -302,6 +309,7 @@ function renderWatchlist() {
 
     if (items.length === 0) {
         container.innerHTML = `<div class="text-center py-12 text-slate-400 font-medium">No matching titles found.</div>`;
+        updateBatchActionUI();
         return;
     }
 
@@ -313,6 +321,7 @@ function renderWatchlist() {
     } else {
         renderGroupedCards(container, items, primaryGroup, secondaryGroup);
     }
+    updateBatchActionUI();
 }
 
 function renderGroupedCards(parentContainer, items, primaryGroup, secondaryGroup = null) {
@@ -357,6 +366,7 @@ function renderGroupCards(parentContainer, items) {
     grid.className = 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 my-2';
 
     items.forEach(item => {
+        renderedDocIds.add(item.docId);
         const card = document.createElement('div');
         card.className = `movie-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between transition-all hover:-translate-y-1 hover:border-sky-400 ${item.watched ? 'opacity-50' : ''}`;
         
@@ -370,7 +380,10 @@ function renderGroupCards(parentContainer, items) {
                 ${posterHtml}
                 <span class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full text-white uppercase shadow-md ${badgeClass}">${mainPlatform}</span>
                 <span class="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold rounded bg-slate-950/80 text-amber-300 backdrop-blur-sm">⭐ ${item.rating || 'N/A'}</span>
-                ${needsMetadata ? `<button title="Refresh metadata" aria-label="Refresh metadata for ${item.title}" class="absolute top-2 left-2 w-7 h-7 rounded-full bg-slate-950/80 text-white hover:bg-sky-600" onclick="refreshMetadata('${item.docId}')">↻</button>` : ''}
+                <label class="absolute top-2 left-2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-slate-950/80" title="Select ${item.title}">
+                    <input type="checkbox" aria-label="Select ${item.title}" ${selectedDocIds.has(item.docId) ? 'checked' : ''} onchange="toggleItemSelection('${item.docId}', this.checked)" class="accent-sky-500">
+                </label>
+                ${needsMetadata ? `<button title="Refresh metadata" aria-label="Refresh metadata for ${item.title}" class="absolute top-2 left-11 w-7 h-7 rounded-full bg-slate-950/80 text-white hover:bg-sky-600" onclick="refreshMetadata('${item.docId}')">↻</button>` : ''}
             </div>
             <div class="p-3 flex-1 flex flex-col justify-between">
                 <div>
@@ -392,6 +405,32 @@ function renderGroupCards(parentContainer, items) {
     });
 
     parentContainer.appendChild(grid);
+}
+
+function updateBatchActionUI() {
+    const count = document.getElementById('selectedCount');
+    if (count) count.textContent = `${selectedDocIds.size} selected`;
+
+    const selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) {
+        const selectedVisibleCount = [...renderedDocIds].filter(docId => selectedDocIds.has(docId)).length;
+        selectAll.checked = renderedDocIds.size > 0 && selectedVisibleCount === renderedDocIds.size;
+        selectAll.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < renderedDocIds.size;
+    }
+}
+
+function toggleItemSelection(docId, isSelected) {
+    if (isSelected) selectedDocIds.add(docId);
+    else selectedDocIds.delete(docId);
+    updateBatchActionUI();
+}
+
+function toggleSelectAll(isSelected) {
+    renderedDocIds.forEach(docId => {
+        if (isSelected) selectedDocIds.add(docId);
+        else selectedDocIds.delete(docId);
+    });
+    renderWatchlist();
 }
 
 async function refreshMetadata(docId) {
@@ -447,6 +486,99 @@ async function addItem() {
     }
 
     if (titleInput) titleInput.value = '';
+}
+
+function sleep(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+async function bulkUploadItems() {
+    const textarea = document.getElementById('bulkTitles');
+    const progressContainer = document.getElementById('bulkProgressContainer');
+    const progressBar = document.getElementById('bulkProgressBar');
+    const statusText = document.getElementById('bulkStatusText');
+    const uploadButton = document.getElementById('bulkUploadButton');
+    const titles = [...new Set((textarea?.value || '').split(/[\n,]+/).map(title => title.trim()).filter(Boolean))];
+
+    if (titles.length === 0) {
+        if (statusText) statusText.textContent = 'Enter at least one title to upload.';
+        if (progressContainer) progressContainer.classList.remove('hidden');
+        return;
+    }
+    if (!db) {
+        if (statusText) statusText.textContent = 'Firestore is not available.';
+        if (progressContainer) progressContainer.classList.remove('hidden');
+        return;
+    }
+
+    if (progressContainer) progressContainer.classList.remove('hidden');
+    if (uploadButton) uploadButton.disabled = true;
+    if (progressBar) progressBar.style.width = '0%';
+
+    let added = 0;
+    const failures = [];
+    try {
+        for (let index = 0; index < titles.length; index += 1) {
+            const title = titles[index];
+            if (statusText) statusText.textContent = `Processing ${index + 1} of ${titles.length}: ${title}`;
+
+            try {
+                const metadata = await fetchTMDBDetails(title);
+                if (!metadata.valid) {
+                    failures.push(title);
+                } else {
+                    const { valid, ...item } = metadata;
+                    await db.collection('watchlist').add({
+                        ...item,
+                        watched: false,
+                        addedBy: currentUser ? (currentUser.displayName || currentUser.email) : 'Guest'
+                    });
+                    added += 1;
+                }
+            } catch (error) {
+                failures.push(title);
+            }
+
+            if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / titles.length) * 100)}%`;
+            if (index < titles.length - 1) await sleep(250);
+        }
+        if (textarea) textarea.value = failures.join('\n');
+        if (statusText) {
+            statusText.textContent = failures.length
+                ? `Complete: added ${added} of ${titles.length}. Could not add: ${failures.join(', ')}.`
+                : `Complete: added ${added} of ${titles.length} titles.`;
+        }
+    } finally {
+        if (uploadButton) uploadButton.disabled = false;
+    }
+}
+
+async function deleteSelected() {
+    const docIds = [...selectedDocIds];
+    if (!db || docIds.length === 0) return;
+    if (!confirm(`Delete ${docIds.length} selected title${docIds.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+
+    for (let start = 0; start < docIds.length; start += 500) {
+        const batch = db.batch();
+        docIds.slice(start, start + 500).forEach(docId => batch.delete(db.collection('watchlist').doc(docId)));
+        await batch.commit();
+    }
+    selectedDocIds.clear();
+    updateBatchActionUI();
+}
+
+async function deleteAll() {
+    if (!db || currentWatchlistItems.length === 0) return;
+    if (!confirm(`Delete all ${currentWatchlistItems.length} titles in your watchlist? This cannot be undone.`)) return;
+
+    const docIds = currentWatchlistItems.map(item => item.docId);
+    for (let start = 0; start < docIds.length; start += 500) {
+        const batch = db.batch();
+        docIds.slice(start, start + 500).forEach(docId => batch.delete(db.collection('watchlist').doc(docId)));
+        await batch.commit();
+    }
+    selectedDocIds.clear();
+    updateBatchActionUI();
 }
 
 async function toggleWatched(docId) {
