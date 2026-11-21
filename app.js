@@ -934,6 +934,20 @@ function mapTrendingResult(result, mediaType = result.media_type) {
     };
 }
 
+// Discover badges: fetch normalized streaming services available for one India title.
+async function fetchCandidateIndiaPlatforms(mediaType, id) {
+    try {
+        const response = await fetch(buildTMDBUrl(`/${mediaType}/${id}/watch/providers`));
+        if (!response.ok) throw new Error(`TMDB provider lookup returned ${response.status}.`);
+        const data = await response.json();
+        const providerNames = data.results?.IN?.flatrate?.map(provider => provider.provider_name) || [];
+        return [...new Set(providerNames.map(normalizePlatformName))];
+    } catch (error) {
+        console.warn(`Could not load India platforms for ${mediaType} ${id}.`, error);
+        return [];
+    }
+}
+
 // Provider lookup: fetch India service IDs once and combine normalized aliases.
 async function fetchIndiaWatchProviderMap() {
     if (!indiaWatchProviderMapPromise) {
@@ -1015,6 +1029,10 @@ async function loadTrendingDiscover() {
         sixMonthsAgo.setDate(Math.min(todayDate.getDate(), lastDayOfStartMonth));
         const today = formatTrendingDate(todayDate);
         const startDate = formatTrendingDate(sixMonthsAgo);
+        const twelveMonthsAgo = new Date(todayDate.getFullYear(), todayDate.getMonth() - 12, 1);
+        const lastDayOfTwelveMonthStart = new Date(twelveMonthsAgo.getFullYear(), twelveMonthsAgo.getMonth() + 1, 0).getDate();
+        twelveMonthsAgo.setDate(Math.min(todayDate.getDate(), lastDayOfTwelveMonthStart));
+        const twelveMonthStartDate = formatTrendingDate(twelveMonthsAgo);
 
         const languages = language === 'my_langs' ? profile.languages : [language];
         if (languages.length === 0) {
@@ -1028,7 +1046,7 @@ async function loadTrendingDiscover() {
             const params = new URLSearchParams({
                 watch_region: 'IN',
                 with_watch_monetization_types: 'flatrate',
-                'vote_count.gte': '5',
+                'vote_count.gte': '10',
                 sort_by: sort === 'newest'
                     ? (mediaType === 'movie' ? 'primary_release_date.desc' : 'first_air_date.desc')
                     : 'popularity.desc'
@@ -1045,9 +1063,10 @@ async function loadTrendingDiscover() {
                     params.set('with_release_type', '4');
                     params.set('release_date.gte', startDate);
                     params.set('release_date.lte', today);
+                    params.set('primary_release_date.gte', twelveMonthStartDate);
                 } else {
-                    params.set('air_date.gte', startDate);
-                    params.set('air_date.lte', today);
+                    params.set('first_air_date.gte', startDate);
+                    params.set('first_air_date.lte', today);
                 }
             }
 
@@ -1087,6 +1106,27 @@ async function loadTrendingDiscover() {
             candidates = [...new Map(candidates.map(candidate => [String(candidate.id), candidate])).values()];
             candidates = candidates.slice(0, 12);
         }
+
+        if (platform !== 'All' && platform !== 'my_subs') {
+            candidates.forEach(candidate => {
+                candidate.platform = platform;
+                candidate.platforms = [platform];
+            });
+        } else {
+            await Promise.all(candidates.map(async candidate => {
+                if (!Array.isArray(candidate.platforms)) {
+                    candidate._indiaPlatformsPromise ||= fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+                    candidate.platforms = await candidate._indiaPlatformsPromise;
+                }
+                const normalizedAvailable = candidate.platforms.map(normalizePlatformName);
+                const preferredPlatform = platform === 'my_subs'
+                    ? profile.subscriptions.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)))
+                    : null;
+                candidate.platform = preferredPlatform
+                    ? normalizePlatformName(preferredPlatform)
+                    : (normalizedAvailable[0] || 'Not Streaming in IN');
+            }));
+        }
         trendingCache.set(cacheKey, candidates);
         if (requestToken === trendingLoadToken) renderTrendingShelf(candidates);
     } catch (error) {
@@ -1108,19 +1148,27 @@ function renderTrendingShelf(candidates) {
     candidates.forEach(candidate => {
         const card = document.createElement('article');
         card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
+        const posterFrame = document.createElement('div');
+        posterFrame.className = 'relative';
         if (candidate.poster) {
             const poster = document.createElement('img');
             poster.src = candidate.poster;
             poster.alt = `Poster for ${candidate.title}`;
             poster.loading = 'lazy';
             poster.className = 'h-40 w-full object-cover';
-            card.appendChild(poster);
+            posterFrame.appendChild(poster);
         } else {
             const fallback = document.createElement('div');
             fallback.textContent = '🎬';
             fallback.className = 'flex h-40 items-center justify-center bg-slate-200 dark:bg-slate-900 text-3xl';
-            card.appendChild(fallback);
+            posterFrame.appendChild(fallback);
         }
+        const platformBadge = document.createElement('span');
+        const candidatePlatform = candidate.platform || 'Not Streaming in IN';
+        platformBadge.textContent = candidatePlatform;
+        platformBadge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${getPlatformBadgeClass(candidatePlatform)}`;
+        posterFrame.appendChild(platformBadge);
+        card.appendChild(posterFrame);
 
         const body = document.createElement('div');
         body.className = 'p-2';

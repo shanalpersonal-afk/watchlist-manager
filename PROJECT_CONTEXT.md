@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.12.0**
+**Current version: v2.12.1**
 
 ## 1. Project Vision
 
@@ -17,7 +17,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.12.0
+## 3. Completed Features Through v2.12.1
 
 ### Authentication and private libraries
 
@@ -58,6 +58,11 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Set the Worker secret `TMDB_API_KEY` in Cloudflare so the proxy can authenticate its upstream TMDB requests.
 - The configured proxy URL is `https://tmdb-proxy.shanalgr8.workers.dev`; the Worker allows the GitHub Pages origin `https://shanalpersonal-afk.github.io` and localhost/127.0.0.1 origins on any port for Live Server.
 
+### Discover freshness and platform badges
+
+- Six-month Discover freshness applies to every movie/TV and `my_subs`/`my_langs` query: movies use a six-month India digital release window plus a twelve-month primary-release cutoff, and TV uses a six-month first-air-date window. Queries use India availability, flat-rate streaming, popularity/newest sorting, and at least 10 votes.
+- Discover tiles show India streaming platform badges. Provider results are normalized and cached on each candidate; `my_subs` prioritizes an available service from the user's subscriptions.
+
 ### Other library features
 
 - Live search, type/platform/genre/language filters, sorting, one- and two-level collapsible grouping, watched status, metadata refresh, per-card selection, and confirmed batch deletion.
@@ -80,7 +85,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
