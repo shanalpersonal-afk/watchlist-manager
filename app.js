@@ -49,6 +49,7 @@ let tourStartingView = null;
 let currentViewName = 'library';
 let bulkReviewItems = [];
 let bulkUploadCounts = { added: 0, skipped: 0, notFound: 0, processed: 0, total: 0, failures: 0 };
+let isManageMode = false;
 
 const WATCHLIST_TOUR_STEPS = [
     { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
@@ -84,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
             searchCandidateInput();
         }
     });
+    initLibraryPreferences();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
@@ -160,9 +162,11 @@ function showWatchlistTourStep() {
     if (getComputedStyle(tourTarget).position === 'static') tourTarget.style.position = 'relative';
     tourTarget.style.zIndex = '40';
 
-    if (step.selector === '#filterDrawer' && window.innerWidth < 768 && getComputedStyle(tourTarget).display === 'none') {
+    const filterDrawer = document.getElementById('filterDrawer');
+    if ((step.selector === '#filterDrawer' || tourTarget.id === 'primaryGroupSelect') && filterDrawer?.classList.contains('hidden')) {
         tourOpenedFilterDrawer = true;
-        tourTarget.classList.remove('hidden');
+        filterDrawer.classList.remove('hidden');
+        filterDrawer.classList.add('grid');
     }
 
     document.getElementById('tourStepCount').textContent = `Step ${activeTourStep + 1} of ${WATCHLIST_TOUR_STEPS.length}`;
@@ -216,7 +220,11 @@ function endWatchlistTour() {
         const panel = document.getElementById('bulkUploadToggle')?.closest('details');
         if (panel) panel.open = false;
     }
-    if (tourOpenedFilterDrawer) document.getElementById('filterDrawer')?.classList.add('hidden');
+    if (tourOpenedFilterDrawer) {
+        const drawer = document.getElementById('filterDrawer');
+        drawer?.classList.add('hidden');
+        drawer?.classList.remove('grid');
+    }
     if (tourStartingView) switchView(tourStartingView);
 
     activeTourStep = -1;
@@ -245,6 +253,71 @@ function switchView(viewName) {
 
     const nextHash = viewName === 'library' ? '#library' : '#add';
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
+}
+
+function initLibraryPreferences() {
+    const primary = document.getElementById('primaryGroupSelect');
+    const secondary = document.getElementById('secondaryGroupSelect');
+    if (!primary || !secondary) return;
+
+    let savedPrimary = 'status';
+    let savedSecondary = 'platform';
+    try {
+        savedPrimary = localStorage.getItem('watchlist_primary_group') || savedPrimary;
+        savedSecondary = localStorage.getItem('watchlist_secondary_group') || savedSecondary;
+    } catch (error) {
+        console.warn('Could not load saved grouping preferences.', error);
+    }
+
+    primary.value = [...primary.options].some(option => option.value === savedPrimary) ? savedPrimary : 'status';
+    secondary.value = [...secondary.options].some(option => option.value === savedSecondary) ? savedSecondary : 'platform';
+}
+
+function saveGroupingPreferencesAndRender() {
+    const primary = document.getElementById('primaryGroupSelect');
+    const secondary = document.getElementById('secondaryGroupSelect');
+    try {
+        if (primary) localStorage.setItem('watchlist_primary_group', primary.value);
+        if (secondary) localStorage.setItem('watchlist_secondary_group', secondary.value);
+    } catch (error) {
+        console.warn('Could not save grouping preferences.', error);
+    }
+    renderWatchlist();
+}
+
+function toggleSearchPanel() {
+    const panel = document.getElementById('searchBarPanel');
+    const button = document.getElementById('toggleSearchBtn');
+    if (!panel) return;
+    const isOpening = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !isOpening);
+    if (button) button.setAttribute('aria-expanded', String(isOpening));
+    if (isOpening) document.getElementById('searchQuery')?.focus();
+}
+
+function toggleFilterDrawer() {
+    const drawer = document.getElementById('filterDrawer');
+    const button = document.getElementById('toggleFilterDrawerBtn');
+    if (!drawer) return;
+    const isOpening = drawer.classList.contains('hidden');
+    drawer.classList.toggle('hidden', !isOpening);
+    drawer.classList.toggle('grid', isOpening);
+    if (button) button.setAttribute('aria-expanded', String(isOpening));
+}
+
+function toggleManageMode() {
+    isManageMode = !isManageMode;
+    const actions = document.getElementById('batchActionsBar');
+    const button = document.getElementById('toggleManageBtn');
+    if (actions) actions.classList.toggle('hidden', !isManageMode);
+    if (button) {
+        button.setAttribute('aria-pressed', String(isManageMode));
+        button.classList.toggle('bg-sky-500', isManageMode);
+        button.classList.toggle('text-white', isManageMode);
+        button.classList.toggle('border-sky-500', isManageMode);
+    }
+    if (!isManageMode) selectedDocIds.clear();
+    renderWatchlist();
 }
 
 function loginWithGoogle() {
@@ -325,11 +398,6 @@ function initTheme() {
 function toggleTheme() {
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
-}
-
-function toggleFilterDrawer() {
-    const drawer = document.getElementById('filterDrawer');
-    if (drawer) drawer.classList.toggle('hidden');
 }
 
 function normalizePlatformName(name) {
@@ -770,12 +838,18 @@ function renderGroupedCards(parentContainer, items, primaryGroup, secondaryGroup
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(item);
         });
-        return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+        return [...groups.entries()].sort(([a], [b]) => {
+            if (groupBy === 'status') {
+                const statusOrder = { 'To Watch': 0, Watched: 1 };
+                return (statusOrder[a] ?? 2) - (statusOrder[b] ?? 2) || a.localeCompare(b);
+            }
+            return a.localeCompare(b);
+        });
     };
 
     const makeSection = (label, level) => {
         const section = document.createElement('details');
-        section.open = true;
+        section.open = label !== 'Watched';
         section.className = level === 1 ? 'group-section mb-4' : 'group-section ml-3 mb-3';
         const heading = document.createElement('summary');
         heading.className = 'cursor-pointer select-none font-bold text-slate-800 dark:text-slate-100 bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-4 py-2 mb-2';
@@ -818,9 +892,9 @@ function renderGroupCards(parentContainer, items) {
                 ${posterHtml}
                 <span class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full text-white uppercase shadow-md ${badgeClass}">${mainPlatform}</span>
                 <span class="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold rounded bg-slate-950/80 text-amber-300 backdrop-blur-sm">⭐ ${item.rating || 'N/A'}</span>
-                <label class="absolute top-2 left-2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-slate-950/80" title="Select ${item.title}">
+        ${isManageMode ? `<label class="absolute top-2 left-2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-slate-950/80" title="Select ${item.title}">
                     <input type="checkbox" aria-label="Select ${item.title}" ${selectedDocIds.has(item.docId) ? 'checked' : ''} onchange="toggleItemSelection('${item.docId}', this.checked)" class="accent-sky-500">
-                </label>
+                </label>` : ''}
                 ${needsMetadata ? `<button title="Refresh metadata" aria-label="Refresh metadata for ${item.title}" class="absolute top-2 left-11 w-7 h-7 rounded-full bg-slate-950/80 text-white hover:bg-sky-600" onclick="refreshMetadata('${item.docId}')">↻</button>` : ''}
             </div>
             <div class="p-3 flex-1 flex flex-col justify-between">
