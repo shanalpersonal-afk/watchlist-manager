@@ -54,6 +54,7 @@ let onlyWatchableNow = false;
 let pendingWatchableActivation = false;
 let trendingLoadToken = 0;
 const trendingCache = new Map();
+let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
 const TRENDING_GENRE_IDS = {
     Action: { movie: 28, tv: 10759 },
@@ -823,8 +824,41 @@ function mapTrendingResult(result, mediaType = result.media_type) {
         language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
         genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
         poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
-        popularity: result.popularity || 0
+        popularity: result.popularity || 0,
+        sortDate: result.release_date || result.first_air_date || ''
     };
+}
+
+// Provider lookup: fetch India service IDs once and combine normalized aliases.
+async function fetchIndiaWatchProviderMap() {
+    if (!indiaWatchProviderMapPromise) {
+        indiaWatchProviderMapPromise = (async () => {
+            const response = await fetch(`https://api.themoviedb.org/3/watch/providers/movie?api_key=${TMDB_API_KEY}&watch_region=IN`);
+            if (!response.ok) throw new Error(`TMDB provider lookup returned ${response.status}.`);
+            const data = await response.json();
+            const providerIdsByName = new Map();
+
+            (data.results || []).forEach(provider => {
+                const normalizedName = normalizePlatformName(provider.provider_name);
+                if (!providerIdsByName.has(normalizedName)) providerIdsByName.set(normalizedName, new Set());
+                providerIdsByName.get(normalizedName).add(String(provider.provider_id));
+            });
+
+            return new Map([...providerIdsByName.entries()].map(([name, ids]) => [name, [...ids].join('|')]));
+        })().catch(error => {
+            console.warn('Could not load TMDB India watch providers.', error);
+            return new Map();
+        });
+    }
+    return indiaWatchProviderMapPromise;
+}
+
+// Date helper: format dates using the browser's local calendar for the India window.
+function formatTrendingDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 async function loadTrendingDiscover() {
@@ -835,7 +869,10 @@ async function loadTrendingDiscover() {
     const type = document.getElementById('trendingType')?.value || 'All';
     const genre = document.getElementById('trendingGenre')?.value || 'All';
     const language = document.getElementById('trendingLanguage')?.value || 'All';
-    const cacheKey = `${type}|${genre}|${language}`;
+    const platform = document.getElementById('trendingPlatform')?.value || 'All';
+    const freshness = document.getElementById('trendingFreshness')?.value || '6m';
+    const sort = document.getElementById('trendingSort')?.value || 'popularity';
+    const cacheKey = `${type}|${genre}|${language}|${platform}|${freshness}|${sort}`;
     const requestToken = ++trendingLoadToken;
 
     if (trendingCache.has(cacheKey)) {
@@ -847,35 +884,64 @@ async function loadTrendingDiscover() {
     if (button) button.disabled = true;
     shelf.textContent = 'Loading titles available in India...';
     try {
-        let candidates;
-        if (type === 'All' && genre === 'All' && language === 'All') {
-            const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&region=IN`);
-            if (!response.ok) throw new Error(`TMDB returned ${response.status}.`);
-            const data = await response.json();
-            candidates = (data.results || [])
-                .filter(result => result.media_type === 'movie' || result.media_type === 'tv')
-                .map(result => mapTrendingResult(result));
-        } else {
-            const mediaTypes = type === 'All' ? ['movie', 'tv'] : [type];
-            const resultSets = await Promise.all(mediaTypes.map(async mediaType => {
-                const params = new URLSearchParams({
-                    api_key: TMDB_API_KEY,
-                    sort_by: 'popularity.desc',
-                    watch_region: 'IN'
-                });
-                const genreId = genre !== 'All' ? TRENDING_GENRE_IDS[genre]?.[mediaType] : null;
-                if (genreId) params.set('with_genres', String(genreId));
-                if (language !== 'All') params.set('with_original_language', language);
-
-                const response = await fetch(`https://api.themoviedb.org/3/discover/${mediaType}?${params.toString()}`);
-                if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
-                const data = await response.json();
-                return (data.results || []).map(result => mapTrendingResult(result, mediaType));
-            }));
-            candidates = resultSets.flat().sort((a, b) => b.popularity - a.popularity);
+        let providerIds = null;
+        if (platform !== 'All') {
+            const providerMap = await fetchIndiaWatchProviderMap();
+            providerIds = providerMap.get(normalizePlatformName(platform));
+            if (!providerIds) {
+                trendingCache.set(cacheKey, []);
+                if (requestToken === trendingLoadToken) renderTrendingShelf([]);
+                return;
+            }
         }
 
-        candidates = candidates.sort((a, b) => b.popularity - a.popularity).slice(0, 12);
+        const mediaTypes = type === 'All' ? ['movie', 'tv'] : [type];
+        const todayDate = new Date();
+        const sixMonthsAgo = new Date(todayDate.getFullYear(), todayDate.getMonth() - 6, 1);
+        const lastDayOfStartMonth = new Date(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth() + 1, 0).getDate();
+        sixMonthsAgo.setDate(Math.min(todayDate.getDate(), lastDayOfStartMonth));
+        const today = formatTrendingDate(todayDate);
+        const startDate = formatTrendingDate(sixMonthsAgo);
+
+        const resultSets = await Promise.all(mediaTypes.map(async mediaType => {
+            const params = new URLSearchParams({
+                api_key: TMDB_API_KEY,
+                watch_region: 'IN',
+                with_watch_monetization_types: 'flatrate',
+                'vote_count.gte': '5',
+                sort_by: sort === 'newest'
+                    ? (mediaType === 'movie' ? 'primary_release_date.desc' : 'first_air_date.desc')
+                    : 'popularity.desc'
+            });
+            if (platform !== 'All') params.set('with_watch_providers', providerIds);
+
+            const genreId = genre !== 'All' ? TRENDING_GENRE_IDS[genre]?.[mediaType] : null;
+            if (genreId) params.set('with_genres', String(genreId));
+            if (language !== 'All') params.set('with_original_language', language);
+
+            if (freshness === '6m') {
+                if (mediaType === 'movie') {
+                    params.set('region', 'IN');
+                    params.set('with_release_type', '4');
+                    params.set('release_date.gte', startDate);
+                    params.set('release_date.lte', today);
+                } else {
+                    params.set('air_date.gte', startDate);
+                    params.set('air_date.lte', today);
+                }
+            }
+
+            const response = await fetch(`https://api.themoviedb.org/3/discover/${mediaType}?${params.toString()}`);
+            if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+            const data = await response.json();
+            return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+        }));
+
+        let candidates = resultSets.flat();
+        candidates.sort((a, b) => sort === 'newest'
+            ? (Date.parse(b.sortDate) || 0) - (Date.parse(a.sortDate) || 0)
+            : b.popularity - a.popularity);
+        candidates = candidates.slice(0, 12);
         trendingCache.set(cacheKey, candidates);
         if (requestToken === trendingLoadToken) renderTrendingShelf(candidates);
     } catch (error) {
