@@ -6,23 +6,19 @@
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDZUG-4XfUscT_SQHfVsA3YC0DlfCSiCvI",
-  authDomain: "watchlist-studio-14978.firebaseapp.com",
-  projectId: "watchlist-studio-14978",
-  storageBucket: "watchlist-studio-14978.firebasestorage.app",
-  messagingSenderId: "519504217727",
-  appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
-};
+if (!window.APP_CONFIG) {
+    console.error('Application configuration is missing. Make sure config.js loads before app.js.');
+}
 
-if (typeof firebase !== 'undefined' && firebase.apps.length === 0) {
+const firebaseConfig = window.APP_CONFIG?.firebaseConfig;
+const TMDB_API_KEY = window.APP_CONFIG?.tmdbApiKey;
+
+if (typeof firebase !== 'undefined' && firebaseConfig && firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
 }
-const db = (typeof firebase !== 'undefined') ? firebase.firestore() : null;
-const auth = (typeof firebase !== 'undefined') ? firebase.auth() : null;
-
-const TMDB_API_KEY = "9a748cbbbaad6f4346328823556773cc";
+const firebaseReady = typeof firebase !== 'undefined' && firebase.apps.length > 0;
+const db = firebaseReady ? firebase.firestore() : null;
+const auth = firebaseReady ? firebase.auth() : null;
 
 const TMDB_GENRES = {
     10759: "Action & Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
@@ -360,20 +356,18 @@ function populateFilterDropdowns() {
 async function fetchTMDBDetails(queryTitle) {
     const cleanTitle = queryTitle.trim();
     try {
-        let tvRes = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
-        let tvData = await tvRes.json();
-        let match = null;
-        let mediaType = 'movie';
-
-        if (tvData.results && tvData.results.length > 0) {
-            match = tvData.results[0]; mediaType = 'tv';
-        } else {
-            let movieRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
-            let movieData = await movieRes.json();
-            if (movieData.results && movieData.results.length > 0) {
-                match = movieData.results[0]; mediaType = 'movie';
-            }
-        }
+        const searchRes = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
+        const searchData = await searchRes.json();
+        const results = (searchData.results || []).filter(result => result.media_type === 'movie' || result.media_type === 'tv');
+        const normalizedTitle = cleanTitle.toLocaleLowerCase();
+        const exactMatch = results.find(result => [
+            result.title,
+            result.name,
+            result.original_title,
+            result.original_name
+        ].some(candidate => candidate && candidate.trim().toLocaleLowerCase() === normalizedTitle));
+        const match = exactMatch || results.slice().sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+        const mediaType = match?.media_type;
 
         if (match) {
             const displayTitle = match.title || match.name;
