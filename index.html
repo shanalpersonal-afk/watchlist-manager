@@ -42,10 +42,11 @@
     <div id="appDashboard" class="hidden">
         <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.6.0</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.9.0</span></h1>
             </div>
             <div class="flex items-center gap-3">
                 <button id="startTourBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
+                <button id="openSubscriptionsBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">📺 My OTTs</button>
                 <button onclick="toggleTheme()" class="p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-sm hover:border-sky-400 transition-colors">☀️/🌙</button>
                 <div id="userProfileInfo" class="flex items-center gap-2">
                     <img id="userAvatar" class="w-8 h-8 rounded-full border border-sky-400" src="" alt="User">
@@ -66,6 +67,7 @@
                     <button id="toggleSearchBtn" type="button" onclick="toggleSearchPanel()" aria-expanded="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">🔍 Search</button>
                     <button id="toggleFilterDrawerBtn" type="button" onclick="toggleFilterDrawer()" aria-expanded="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">🎛️ Filters</button>
                     <button id="toggleManageBtn" type="button" onclick="toggleManageMode()" aria-pressed="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">☑️ Manage</button>
+                    <button id="watchableNowBtn" type="button" onclick="toggleWatchableNow()" aria-pressed="false" class="rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:border-emerald-500">✓ Watchable Now</button>
                 </div>
 
                 <div id="searchBarPanel" class="hidden mt-3">
@@ -128,6 +130,30 @@
             </div>
 
             <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
+                <details id="trendingPanel">
+                    <summary class="cursor-pointer text-sm font-bold text-slate-800 dark:text-slate-100">🔥 Trending &amp; Discover in India</summary>
+                    <div class="mt-4 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                            <div>
+                                <label for="trendingType" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Type</label>
+                                <select id="trendingType" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
+                            </div>
+                            <div>
+                                <label for="trendingGenre" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genre</label>
+                                <select id="trendingGenre" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="Action">Action</option><option value="Comedy">Comedy</option><option value="Drama">Drama</option><option value="Crime">Crime</option><option value="Thriller">Thriller</option><option value="Romance">Romance</option><option value="Sci-Fi">Sci-Fi</option><option value="Horror">Horror</option><option value="Animation">Animation</option><option value="Documentary">Documentary</option></select>
+                            </div>
+                            <div>
+                                <label for="trendingLanguage" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Language</label>
+                                <select id="trendingLanguage" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="en">English</option><option value="hi">Hindi</option><option value="ko">Korean</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="ja">Japanese</option></select>
+                            </div>
+                            <button id="loadTrendingBtn" type="button" onclick="loadTrendingDiscover()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600">Discover</button>
+                        </div>
+                        <div id="trendingShelf" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3" aria-live="polite"></div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
                 <details>
                     <summary id="bulkUploadToggle" class="cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300">Bulk Upload</summary>
                     <div class="mt-3 space-y-3">
@@ -145,6 +171,25 @@
                 <div id="bulkReviewContainer" class="mt-4 hidden space-y-3" aria-live="polite"></div>
             </div>
         </section>
+    </div>
+
+    <div id="subscriptionsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="subscriptionsTitle">
+        <div class="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
+            <h2 id="subscriptionsTitle" class="text-lg font-extrabold">My Subscriptions</h2>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose your services to highlight what you can watch now.</p>
+            <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Netflix" class="accent-sky-500">Netflix</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Prime Video" class="accent-sky-500">Prime Video</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Disney+ Hotstar" class="accent-sky-500">Disney+ Hotstar</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="JioCinema" class="accent-sky-500">JioCinema</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Zee5" class="accent-sky-500">Zee5</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="SonyLIV" class="accent-sky-500">SonyLIV</label>
+            </div>
+            <div class="mt-5 flex justify-end gap-2">
+                <button id="closeSubscriptionsBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Close</button>
+                <button id="saveSubscriptionsBtn" type="button" class="rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">Save</button>
+            </div>
+        </div>
     </div>
 
     <div id="tourTooltip" role="dialog" aria-live="polite" aria-labelledby="tourTitle" class="hidden fixed z-50 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-sky-300 dark:border-sky-700 bg-white dark:bg-slate-900 p-4 shadow-2xl">

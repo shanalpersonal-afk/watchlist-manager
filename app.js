@@ -50,6 +50,23 @@ let currentViewName = 'library';
 let bulkReviewItems = [];
 let bulkUploadCounts = { added: 0, skipped: 0, notFound: 0, processed: 0, total: 0, failures: 0 };
 let isManageMode = false;
+let onlyWatchableNow = false;
+let pendingWatchableActivation = false;
+let trendingLoadToken = 0;
+const trendingCache = new Map();
+const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
+const TRENDING_GENRE_IDS = {
+    Action: { movie: 28, tv: 10759 },
+    Comedy: { movie: 35, tv: 35 },
+    Drama: { movie: 18, tv: 18 },
+    Crime: { movie: 80, tv: 80 },
+    Thriller: { movie: 53, tv: 9648 },
+    Romance: { movie: 10749, tv: 10749 },
+    'Sci-Fi': { movie: 878, tv: 10765 },
+    Horror: { movie: 27, tv: 9648 },
+    Animation: { movie: 16, tv: 16 },
+    Documentary: { movie: 99, tv: 99 }
+};
 
 const WATCHLIST_TOUR_STEPS = [
     { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
@@ -85,7 +102,17 @@ document.addEventListener('DOMContentLoaded', () => {
             searchCandidateInput();
         }
     });
+    document.getElementById('openSubscriptionsBtn')?.addEventListener('click', openSubscriptionsModal);
+    document.getElementById('closeSubscriptionsBtn')?.addEventListener('click', closeSubscriptionsModal);
+    document.getElementById('saveSubscriptionsBtn')?.addEventListener('click', saveSubscriptions);
+    document.getElementById('subscriptionsModal')?.addEventListener('click', event => {
+        if (event.target.id === 'subscriptionsModal') closeSubscriptionsModal();
+    });
+    document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
+        if (event.currentTarget.open) loadTrendingDiscover();
+    });
     initLibraryPreferences();
+    updateWatchableNowButton();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
@@ -318,6 +345,80 @@ function toggleManageMode() {
     }
     if (!isManageMode) selectedDocIds.clear();
     renderWatchlist();
+}
+
+function getSubscriptionStorageKey() {
+    return `watchlist_subs_${currentUser?.uid || 'guest'}`;
+}
+
+function getUserSubscriptions() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(getSubscriptionStorageKey()) || '[]');
+        return Array.isArray(saved) ? saved.filter(service => OTT_SERVICES.includes(service)) : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function openSubscriptionsModal() {
+    const subscriptions = new Set(getUserSubscriptions());
+    document.querySelectorAll('#subscriptionsModal [data-subscription]').forEach(input => {
+        input.checked = subscriptions.has(input.dataset.subscription);
+    });
+    document.getElementById('subscriptionsModal')?.classList.remove('hidden');
+}
+
+function closeSubscriptionsModal() {
+    document.getElementById('subscriptionsModal')?.classList.add('hidden');
+    pendingWatchableActivation = false;
+}
+
+function saveSubscriptions() {
+    const subscriptions = [...document.querySelectorAll('#subscriptionsModal [data-subscription]:checked')]
+        .map(input => input.dataset.subscription);
+    try {
+        localStorage.setItem(getSubscriptionStorageKey(), JSON.stringify(subscriptions));
+    } catch (error) {
+        alert('Could not save your subscriptions in this browser.');
+        return;
+    }
+
+    document.getElementById('subscriptionsModal')?.classList.add('hidden');
+    if (pendingWatchableActivation) onlyWatchableNow = subscriptions.length > 0;
+    else if (subscriptions.length === 0) onlyWatchableNow = false;
+    pendingWatchableActivation = false;
+    updateWatchableNowButton();
+    renderWatchlist();
+}
+
+function updateWatchableNowButton() {
+    const button = document.getElementById('watchableNowBtn');
+    if (!button) return;
+    button.setAttribute('aria-pressed', String(onlyWatchableNow));
+    button.classList.toggle('ring-2', onlyWatchableNow);
+    button.classList.toggle('ring-emerald-400', onlyWatchableNow);
+}
+
+function toggleWatchableNow() {
+    if (!onlyWatchableNow && getUserSubscriptions().length === 0) {
+        pendingWatchableActivation = true;
+        openSubscriptionsModal();
+        return;
+    }
+    onlyWatchableNow = !onlyWatchableNow;
+    updateWatchableNowButton();
+    renderWatchlist();
+}
+
+function getItemPlatforms(item) {
+    return Array.isArray(item.platforms) && item.platforms.length > 0
+        ? item.platforms
+        : [item.platform].filter(Boolean);
+}
+
+function itemIsOnSubscribedOTT(item, subscriptions = getUserSubscriptions()) {
+    const normalizedSubscriptions = new Set(subscriptions.map(normalizePlatformName));
+    return getItemPlatforms(item).some(platform => normalizedSubscriptions.has(normalizePlatformName(platform)));
 }
 
 function loginWithGoogle() {
@@ -710,6 +811,139 @@ async function saveCandidateToWatchlist(candidate, button = null) {
     }
 }
 
+function mapTrendingResult(result, mediaType = result.media_type) {
+    const languageCode = result.original_language;
+    const genreId = result.genre_ids?.[0];
+    return {
+        id: result.id,
+        mediaType,
+        title: result.title || result.name,
+        year: (result.release_date || result.first_air_date || '').split('-')[0] || 'N/A',
+        rating: result.vote_average ? result.vote_average.toFixed(1) : 'N/A',
+        language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
+        genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
+        poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+        popularity: result.popularity || 0
+    };
+}
+
+async function loadTrendingDiscover() {
+    const shelf = document.getElementById('trendingShelf');
+    const button = document.getElementById('loadTrendingBtn');
+    if (!shelf) return;
+
+    const type = document.getElementById('trendingType')?.value || 'All';
+    const genre = document.getElementById('trendingGenre')?.value || 'All';
+    const language = document.getElementById('trendingLanguage')?.value || 'All';
+    const cacheKey = `${type}|${genre}|${language}`;
+    const requestToken = ++trendingLoadToken;
+
+    if (trendingCache.has(cacheKey)) {
+        if (button) button.disabled = false;
+        renderTrendingShelf(trendingCache.get(cacheKey));
+        return;
+    }
+
+    if (button) button.disabled = true;
+    shelf.textContent = 'Loading titles available in India...';
+    try {
+        let candidates;
+        if (type === 'All' && genre === 'All' && language === 'All') {
+            const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&region=IN`);
+            if (!response.ok) throw new Error(`TMDB returned ${response.status}.`);
+            const data = await response.json();
+            candidates = (data.results || [])
+                .filter(result => result.media_type === 'movie' || result.media_type === 'tv')
+                .map(result => mapTrendingResult(result));
+        } else {
+            const mediaTypes = type === 'All' ? ['movie', 'tv'] : [type];
+            const resultSets = await Promise.all(mediaTypes.map(async mediaType => {
+                const params = new URLSearchParams({
+                    api_key: TMDB_API_KEY,
+                    sort_by: 'popularity.desc',
+                    watch_region: 'IN'
+                });
+                const genreId = genre !== 'All' ? TRENDING_GENRE_IDS[genre]?.[mediaType] : null;
+                if (genreId) params.set('with_genres', String(genreId));
+                if (language !== 'All') params.set('with_original_language', language);
+
+                const response = await fetch(`https://api.themoviedb.org/3/discover/${mediaType}?${params.toString()}`);
+                if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+                const data = await response.json();
+                return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+            }));
+            candidates = resultSets.flat().sort((a, b) => b.popularity - a.popularity);
+        }
+
+        candidates = candidates.sort((a, b) => b.popularity - a.popularity).slice(0, 12);
+        trendingCache.set(cacheKey, candidates);
+        if (requestToken === trendingLoadToken) renderTrendingShelf(candidates);
+    } catch (error) {
+        if (requestToken === trendingLoadToken) shelf.textContent = `Could not load India discovery: ${error.message}`;
+    } finally {
+        if (requestToken === trendingLoadToken && button) button.disabled = false;
+    }
+}
+
+function renderTrendingShelf(candidates) {
+    const shelf = document.getElementById('trendingShelf');
+    if (!shelf) return;
+    shelf.replaceChildren();
+    if (candidates.length === 0) {
+        shelf.textContent = 'No titles found for these filters.';
+        return;
+    }
+
+    candidates.forEach(candidate => {
+        const card = document.createElement('article');
+        card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
+        if (candidate.poster) {
+            const poster = document.createElement('img');
+            poster.src = candidate.poster;
+            poster.alt = `Poster for ${candidate.title}`;
+            poster.loading = 'lazy';
+            poster.className = 'h-40 w-full object-cover';
+            card.appendChild(poster);
+        } else {
+            const fallback = document.createElement('div');
+            fallback.textContent = '🎬';
+            fallback.className = 'flex h-40 items-center justify-center bg-slate-200 dark:bg-slate-900 text-3xl';
+            card.appendChild(fallback);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'p-2';
+        const title = document.createElement('h3');
+        title.textContent = candidate.title;
+        title.title = candidate.title;
+        title.className = 'truncate text-xs font-bold text-slate-900 dark:text-slate-100';
+        const type = document.createElement('span');
+        type.textContent = candidate.mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie';
+        type.className = 'mt-1 inline-flex rounded-full bg-sky-100 dark:bg-sky-950 px-2 py-0.5 text-[9px] font-bold text-sky-700 dark:text-sky-300';
+        const metadata = document.createElement('p');
+        metadata.textContent = `${candidate.year} · ⭐ ${candidate.rating}`;
+        metadata.className = 'mt-1 text-[10px] text-slate-500 dark:text-slate-400';
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'mt-2 w-full rounded bg-sky-500 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-sky-600 disabled:opacity-70';
+        const saved = isAlreadyInWatchlist(candidate);
+        add.textContent = saved ? '✓ Saved' : '+ Add';
+        add.disabled = saved;
+        add.addEventListener('click', async () => {
+            try {
+                const didSave = await saveCandidateToWatchlist(candidate, add);
+                add.textContent = didSave ? '✓ Added' : '✓ Saved';
+                add.disabled = true;
+            } catch (error) {
+                alert(`Could not add title: ${error.message}`);
+            }
+        });
+        body.append(title, type, metadata, add);
+        card.appendChild(body);
+        shelf.appendChild(card);
+    });
+}
+
 function updateBulkStatus() {
     const statusText = document.getElementById('bulkStatusText');
     if (!statusText) return;
@@ -808,6 +1042,15 @@ function renderWatchlist() {
     if (filterPlatform !== 'All') items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
     if (filterGenre !== 'All') items = items.filter(i => i.genre === filterGenre);
     if (filterLanguage !== 'All') items = items.filter(i => getItemLanguage(i) === filterLanguage);
+    if (onlyWatchableNow) {
+        const subscriptions = getUserSubscriptions();
+        if (subscriptions.length === 0) {
+            onlyWatchableNow = false;
+            updateWatchableNowButton();
+        } else {
+            items = items.filter(item => itemIsOnSubscribedOTT(item, subscriptions));
+        }
+    }
 
     if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
     if (sortBy === 'title-asc') items.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
@@ -887,6 +1130,7 @@ function renderGroupCards(parentContainer, items) {
         const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-200 dark:bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
 
         const needsMetadata = !item.language || !item.rating || item.rating === 'N/A';
+        const onYourOTT = itemIsOnSubscribedOTT(item);
         card.innerHTML = `
             <div class="relative">
                 ${posterHtml}
@@ -904,6 +1148,7 @@ function renderGroupCards(parentContainer, items) {
                         <span>🌐 ${item.language || 'Unknown Language'}</span>
                         <span>🗓️ ${item.year || 'N/A'}</span>
                     </div>
+                    ${onYourOTT ? '<span class="mt-2 inline-flex rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">✓ On Your OTT</span>' : ''}
                 </div>
                 <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
                     <button class="${item.watched ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}" onclick="toggleWatched('${item.docId}')">
