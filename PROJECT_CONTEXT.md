@@ -12,7 +12,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - **UI:** Tailwind CSS via CDN with class-based dark mode and custom platform badge styles.
 - **Backend:** Firebase Authentication and Cloud Firestore using the compat SDK.
 - **Metadata and discovery:** TMDB `/search/multi`, `/discover`, `/trending`, and `/watch/providers` endpoints.
-- **Hosting:** GitHub Pages.
+- **Hosting:** [GitHub Pages](https://shanalpersonal-afk.github.io/watchlist-manager/).
 - **Main files:** `index.html`, `config.js`, `app.js`, and the Cloudflare Worker reference `worker.js`. `style.css` is legacy and currently unused.
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
@@ -55,7 +55,8 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 - Browser requests to TMDB use `buildTMDBUrl(endpointPath, queryParams)` and the configured `tmdbProxyUrl`; the TMDB API key is no longer stored in `config.js` or sent by browser code.
 - `worker.js` is the Cloudflare Worker reference. It restricts allowed origins and TMDB paths, reads the secret `TMDB_API_KEY` Worker variable, and forwards TMDB JSON responses with CORS headers.
-- Before deployment, set the Worker secret `TMDB_API_KEY` and replace `YOUR_CLOUDFLARE_WORKER_URL` in `config.js` with the deployed Worker URL.
+- Set the Worker secret `TMDB_API_KEY` in Cloudflare so the proxy can authenticate its upstream TMDB requests.
+- The configured proxy URL is `https://tmdb-proxy.shanalgr8.workers.dev`; the Worker allows the GitHub Pages origin `https://shanalpersonal-afk.github.io` and localhost/127.0.0.1 origins on any port for Live Server.
 
 ### Other library features
 

@@ -1,12 +1,14 @@
-const ALLOWED_ORIGINS = new Set([
-    'https://erson-afk.github.io',
-    'http://127.0.0.1:5500',
-    'http://localhost:5500'
-]);
+const GITHUB_PAGES_ORIGIN = 'https://shanalpersonal-afk.github.io';
+
+function isAllowedOrigin(origin) {
+    return origin === GITHUB_PAGES_ORIGIN
+        || /^http:\/\/localhost(?::\d+)?$/.test(origin || '')
+        || /^http:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin || '');
+}
 
 function jsonResponse(payload, status, origin) {
     const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8' });
-    if (origin && ALLOWED_ORIGINS.has(origin)) {
+    if (origin && isAllowedOrigin(origin)) {
         headers.set('Access-Control-Allow-Origin', origin);
         headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
         headers.set('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,7 +23,7 @@ export default {
         const requestUrl = new URL(request.url);
         const origin = request.headers.get('Origin');
 
-        if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+        if (!isAllowedOrigin(origin)) {
             return jsonResponse({ error: 'Origin is not allowed.' }, 403, null);
         }
 

@@ -7,5 +7,5 @@ window.APP_CONFIG = {
         messagingSenderId: "519504217727",
         appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
     },
-    tmdbProxyUrl: "tmdb-proxy.shanalgr8.workers.dev"
+    tmdbProxyUrl: "https://tmdb-proxy.shanalgr8.workers.dev"
 };
