@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio v2.9.1</title>
+    <title>Watchlist Studio v2.10.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -42,7 +42,7 @@
     <div id="appDashboard" class="hidden">
         <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.9.1</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.10.0</span></h1>
             </div>
             <div class="flex items-center gap-3">
                 <button id="startTourBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
@@ -169,9 +169,12 @@
                 <details>
                     <summary id="bulkUploadToggle" class="cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300">Bulk Upload</summary>
                     <div class="mt-3 space-y-3">
-                        <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line.</label>
-                        <textarea id="bulkTitles" rows="4" placeholder="Inception&#10;The Matrix&#10;Sacred Games" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
-                        <button id="bulkUploadButton" onclick="bulkUploadItems()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Upload Titles</button>
+                        <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line, or paste a messy social media caption or list.</label>
+                        <textarea id="bulkTitles" rows="4" placeholder="Inception&#10;The Matrix&#10;Sacred Games&#10;&#10;Or paste an Instagram, YouTube, WhatsApp, or Reddit caption..." class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="bulkUploadButton" onclick="bulkUploadItems()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Upload Titles</button>
+                            <button id="extractTitlesBtn" type="button" onclick="handleExtractSocialTitles()" class="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 px-4 py-2 text-sm font-bold text-sky-700 dark:text-sky-300 hover:border-sky-500">✨ Extract Titles</button>
+                        </div>
                         <div id="bulkProgressContainer" class="hidden space-y-1" aria-live="polite">
                             <div class="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                                 <div id="bulkProgressBar" class="h-full w-0 bg-sky-500 transition-all duration-200"></div>

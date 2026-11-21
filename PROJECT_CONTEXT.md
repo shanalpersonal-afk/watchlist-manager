@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.9.1**
+**Current version: v2.10.0**
 
 ## 1. Project Vision
 
@@ -17,7 +17,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and TMDB API key. `index.html` loads it immediately before `app.js`; app code reads the values from `window.APP_CONFIG`.
 
-## 3. Completed Features Through v2.9.1
+## 3. Completed Features Through v2.10.0
 
 ### Authentication and private libraries
 
@@ -38,6 +38,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Candidate cards show poster, title, year, movie/TV type, language, rating, and duplicate status. Saving a candidate fetches its exact movie/TV India provider data and stores its TMDB ID.
 - Smart Bulk Upload (Option A) searches each title sequentially. It auto-adds a clear winner (single result or at least 2.5 times the second result’s popularity), skips already-saved matches, reports titles not found, and queues ambiguous matches in a review panel.
 - Review choices use the same candidate save flow and remove the review row after a successful add.
+- The **Smart Social Text Parser** cleans messy Instagram, YouTube, WhatsApp, and Reddit captions/lists into ordered, deduplicated titles. It strips links, hashtags, emojis, bullets, common CTA lines, and trailing platform/year/language tags before users review and upload the extracted list.
 
 ### India discovery and subscriptions
 
@@ -70,16 +71,18 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
 - Discovery: `fetchIndiaWatchProviderMap`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
-- Bulk and batch actions: `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
+- Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
-## 5. Known Issues and v3.0.0 Roadmap
+## 5. Remaining Next Steps
 
+- Add **Because You Watched** personalized recommendations.
 - Configure and verify **Firestore Security Rules in the Firebase Console** so reads and writes are enforced by authenticated UID, in addition to client-side scoping.
-- Add a **Smart Social Text Parser** for pasted recommendations and links from social platforms.
-- Add **JSON/CSV Export and Import** for backups and migration.
 - Add an optional **Shared/Family Watchlist** toggle.
+- Add **JSON/CSV Export and Import** for backups and migration.
 - Add a **Cloudflare Worker API proxy** so TMDB requests do not expose the API key in the browser.
+
+These items form the remaining v3.0.0 roadmap.
 
 ## 6. Working Rules
 

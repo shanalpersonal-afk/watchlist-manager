@@ -1273,6 +1273,90 @@ async function refreshMetadata(docId) {
 // ==========================================
 // 5. Data Mutations (Watched / Add / Delete)
 // ==========================================
+// Social text parser: clean pasted captions into a deduplicated title list.
+function extractTitlesFromSocialText(rawText) {
+    const titles = [];
+    const seenTitles = new Set();
+    const socialFiller = /\b(follow for more|save this|link in bio|subscribe|comment below|must[ -]?watch|top\s*(?:5|10))\b/i;
+    const ctaPhrases = /\b(follow for more|save this(?: for later)?|link in bio|subscribe(?: now)?|comment below)\b/i;
+    const trailingService = /\s*(?:\||—|–|-)?\s*(?:on\s+)?(?:Amazon\s+Prime\s+Video|Prime\s+Video|Netflix|Disney\+\s*Hotstar|Disney\+|Hotstar|JioCinema|Zee5|SonyLIV)\s*$/i;
+    const trailingParenthetical = /\s*\((?:19\d{2}|20\d{2}|Netflix|Amazon\s+Prime\s+Video|Prime\s+Video|Disney\+\s*Hotstar|Disney\+|Hotstar|JioCinema|Zee5|SonyLIV|Hindi|English|Korean|Tamil|Telugu|Japanese)\)\s*$/i;
+
+    String(rawText || '').split(/\r?\n/).forEach(rawLine => {
+        let line = rawLine
+            .replace(/https?:\/\/\S+/gi, ' ')
+            .replace(/#\p{L}[\p{L}\p{N}_]*/gu, ' ')
+            .replace(/[0-9#*]\uFE0F?\u20E3/gu, ' ')
+            .replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0E\uFE0F\u200D]/gu, ' ')
+            .replace(/^\s*(?:(?:[-*•>]+)|(?:\d{1,3}[.)]))\s*/, '')
+            .trim();
+
+        if (line.length <= 1) return;
+
+        const titleSeparator = line.match(/^(.*?)\s*(?::|->|→|—|–|-)\s+(.+)$/);
+        if (titleSeparator && socialFiller.test(titleSeparator[1])) {
+            line = titleSeparator[2].trim();
+        } else if (socialFiller.test(line)) {
+            return;
+        }
+
+        line = line.replace(/\s*(?:[,;|—–-]\s*)?(?:follow for more|save this(?: for later)?|link in bio|subscribe(?: now)?|comment below)\b.*$/i, '');
+        line = line.replace(/\s*(?:[-|—–]\s*)?(?:now streaming|streaming on|available on|watch on)\b.*$/i, '');
+        line = line.replace(/\s+[—–]\s+(?:a must watch|must[ -]?watch|highly recommended|(?:a |an )?(?:masterpiece|amazing|great|incredible|mind[- ]blowing)|worth watching|hidden gem|best movie|best series)\b.*$/i, '');
+        for (let pass = 0; pass < 3; pass += 1) {
+            const cleanedLine = line
+                .replace(trailingService, '')
+                .replace(trailingParenthetical, '')
+                .replace(/\s*(?:[-|—–]\s*)(?:19\d{2}|20\d{2})\s*$/i, '')
+                .replace(/\s*(?:[-|—–]\s*)(?:Hindi|English|Korean|Tamil|Telugu|Japanese)\s*$/i, '')
+                .trim();
+            if (cleanedLine === line) break;
+            line = cleanedLine;
+        }
+
+        line = line.replace(/^[\s:;,.!?]+|[\s:;,.!?]+$/g, '').trim();
+        if (line.length <= 1) return;
+
+        const duplicateKey = line.toLocaleLowerCase();
+        if (!seenTitles.has(duplicateKey)) {
+            seenTitles.add(duplicateKey);
+            titles.push(line);
+        }
+    });
+
+    return titles;
+}
+
+// Social text action: replace the bulk field with extracted titles and a clear status.
+function handleExtractSocialTitles() {
+    const textarea = document.getElementById('bulkTitles');
+    const progressContainer = document.getElementById('bulkProgressContainer');
+    const progressBar = document.getElementById('bulkProgressBar');
+    const statusText = document.getElementById('bulkStatusText');
+    const rawText = textarea?.value || '';
+
+    if (progressContainer) progressContainer.classList.remove('hidden');
+    if (!rawText.trim()) {
+        if (statusText) statusText.textContent = 'Paste a caption or list first.';
+        return;
+    }
+
+    const titles = extractTitlesFromSocialText(rawText);
+    if (titles.length === 0) {
+        const containsLink = /http|instagram\.com|youtube\.com|youtu\.be/i.test(rawText);
+        if (statusText) {
+            statusText.textContent = containsLink
+                ? "Links can't be read directly—copy & paste the caption, description, or comment text instead."
+                : 'No titles found. Paste a caption or title list and try again.';
+        }
+        return;
+    }
+
+    if (textarea) textarea.value = titles.join('\n');
+    if (progressBar) progressBar.style.width = '0%';
+    if (statusText) statusText.textContent = `Extracted ${titles.length} title(s). Review the list and click Upload Titles.`;
+}
+
 function sleep(milliseconds) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
