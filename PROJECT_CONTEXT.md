@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.11.0**
+**Current version: v2.12.0**
 
 ## 1. Project Vision
 
@@ -13,11 +13,11 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - **Backend:** Firebase Authentication and Cloud Firestore using the compat SDK.
 - **Metadata and discovery:** TMDB `/search/multi`, `/discover`, `/trending`, and `/watch/providers` endpoints.
 - **Hosting:** GitHub Pages.
-- **Main files:** `index.html`, `config.js`, and `app.js`. `style.css` is legacy and currently unused.
+- **Main files:** `index.html`, `config.js`, `app.js`, and the Cloudflare Worker reference `worker.js`. `style.css` is legacy and currently unused.
 
-`config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and TMDB API key. `index.html` loads it immediately before `app.js`; app code reads the values from `window.APP_CONFIG`.
+`config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.11.0
+## 3. Completed Features Through v2.12.0
 
 ### Authentication and private libraries
 
@@ -51,6 +51,12 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover can default to **My Subscriptions** and **My Languages**. It combines provider IDs for all selected services and queries each preferred language, then interleaves and deduplicates results for balanced recommendations.
 - **Watchable Now** filters the library to subscribed normalized platforms; matching cards show an “On Your OTT” marker. If no subscriptions are saved, the profile modal opens first.
 
+### TMDB API proxy
+
+- Browser requests to TMDB use `buildTMDBUrl(endpointPath, queryParams)` and the configured `tmdbProxyUrl`; the TMDB API key is no longer stored in `config.js` or sent by browser code.
+- `worker.js` is the Cloudflare Worker reference. It restricts allowed origins and TMDB paths, reads the secret `TMDB_API_KEY` Worker variable, and forwards TMDB JSON responses with CORS headers.
+- Before deployment, set the Worker secret `TMDB_API_KEY` and replace `YOUR_CLOUDFLARE_WORKER_URL` in `config.js` with the deployed Worker URL.
+
 ### Other library features
 
 - Live search, type/platform/genre/language filters, sorting, one- and two-level collapsible grouping, watched status, metadata refresh, per-card selection, and confirmed batch deletion.
@@ -61,7 +67,8 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 ### Files
 
-- `config.js` — `window.APP_CONFIG` Firebase and TMDB configuration.
+- `config.js` — `window.APP_CONFIG` Firebase configuration and the Cloudflare Worker URL; it contains no TMDB API key.
+- `worker.js` — Cloudflare Worker source/reference that keeps the TMDB API key server-side.
 - `index.html` — splash, dashboard views, controls, discovery panel, profile preferences modal, and script loading order.
 - `app.js` — auth/listener lifecycle, candidate and discovery workflows, rendering, local preferences, and Firestore mutations.
 - `style.css` — legacy stylesheet; not loaded or used by the current app.
@@ -72,7 +79,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
-- Discovery: `fetchIndiaWatchProviderMap`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
@@ -82,7 +89,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Configure and verify **Firestore Security Rules in the Firebase Console** so reads and writes are enforced by authenticated UID, in addition to client-side scoping.
 - Add an optional **Shared/Family Watchlist** toggle.
 - Add **JSON/CSV Export and Import** for backups and migration.
-- Add a **Cloudflare Worker API proxy** so TMDB requests do not expose the API key in the browser.
+- Deploy `worker.js`, configure the `TMDB_API_KEY` Worker secret, and set the deployed URL in `config.js`.
 
 These items form the remaining v3.0.0 roadmap.
 

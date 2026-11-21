@@ -11,7 +11,35 @@ if (!window.APP_CONFIG) {
 }
 
 const firebaseConfig = window.APP_CONFIG?.firebaseConfig;
-const TMDB_API_KEY = window.APP_CONFIG?.tmdbApiKey;
+const TMDB_PROXY_URL = window.APP_CONFIG?.tmdbProxyUrl;
+let tmdbProxyAlertShown = false;
+
+if (!TMDB_PROXY_URL || TMDB_PROXY_URL === 'YOUR_CLOUDFLARE_WORKER_URL') {
+    console.error('TMDB proxy is not configured. Set tmdbProxyUrl in config.js to your deployed Cloudflare Worker URL.');
+}
+
+function buildTMDBUrl(endpointPath, queryParams = {}) {
+    if (!TMDB_PROXY_URL || TMDB_PROXY_URL === 'YOUR_CLOUDFLARE_WORKER_URL') {
+        const message = 'TMDB proxy is not configured. Deploy worker.js and set tmdbProxyUrl in config.js.';
+        console.error(message);
+        if (!tmdbProxyAlertShown) {
+            alert(message);
+            tmdbProxyAlertShown = true;
+        }
+        throw new Error(message);
+    }
+    const normalizedEndpoint = `/${String(endpointPath).replace(/^\/+/, '').replace(/^3\//, '')}`;
+    const params = queryParams instanceof URLSearchParams ? new URLSearchParams(queryParams) : new URLSearchParams();
+    if (!(queryParams instanceof URLSearchParams)) {
+        Object.entries(queryParams || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) params.set(key, String(value));
+        });
+    }
+    params.delete('api_key');
+    const baseUrl = TMDB_PROXY_URL.replace(/\/+$/, '');
+    const query = params.toString();
+    return `${baseUrl}/3${normalizedEndpoint}${query ? `?${query}` : ''}`;
+}
 
 if (typeof firebase !== 'undefined' && firebaseConfig && firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
@@ -646,7 +674,7 @@ function populateFilterDropdowns() {
 async function fetchTMDBDetails(queryTitle) {
     const cleanTitle = queryTitle.trim();
     try {
-        const searchRes = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanTitle)}`);
+        const searchRes = await fetch(buildTMDBUrl('/search/multi', { query: cleanTitle }));
         const searchData = await searchRes.json();
         const results = (searchData.results || []).filter(result => result.media_type === 'movie' || result.media_type === 'tv');
         const normalizedTitle = cleanTitle.toLocaleLowerCase();
@@ -673,7 +701,7 @@ async function fetchTMDBDetails(queryTitle) {
 
             let indiaPlatforms = [];
             try {
-                const providerRes = await fetch(`https://api.themoviedb.org/3/${mediaType}/${match.id}/watch/providers?api_key=${TMDB_API_KEY}`);
+                const providerRes = await fetch(buildTMDBUrl(`/${mediaType}/${match.id}/watch/providers`));
                 const providerData = await providerRes.json();
                 if (providerData.results && providerData.results.IN && providerData.results.IN.flatrate) {
                     const rawPlatforms = providerData.results.IN.flatrate.map(p => p.provider_name);
@@ -703,7 +731,7 @@ async function searchTMDBCandidates(query) {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
-    const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanQuery)}`);
+    const response = await fetch(buildTMDBUrl('/search/multi', { query: cleanQuery }));
     if (!response.ok) throw new Error(`TMDB search failed (${response.status}).`);
     const data = await response.json();
     const normalizedQuery = cleanQuery.toLocaleLowerCase();
@@ -838,7 +866,7 @@ async function searchCandidateInput() {
 
 async function fetchIndiaProviders(mediaType, tmdbId) {
     try {
-        const response = await fetch(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`);
+        const response = await fetch(buildTMDBUrl(`/${mediaType}/${tmdbId}/watch/providers`));
         const data = await response.json();
         const rawProviders = data.results?.IN?.flatrate?.map(provider => provider.provider_name) || [];
         const platforms = [...new Set(rawProviders.map(normalizePlatformName))];
@@ -910,7 +938,7 @@ function mapTrendingResult(result, mediaType = result.media_type) {
 async function fetchIndiaWatchProviderMap() {
     if (!indiaWatchProviderMapPromise) {
         indiaWatchProviderMapPromise = (async () => {
-            const response = await fetch(`https://api.themoviedb.org/3/watch/providers/movie?api_key=${TMDB_API_KEY}&watch_region=IN`);
+            const response = await fetch(buildTMDBUrl('/watch/providers/movie', { watch_region: 'IN' }));
             if (!response.ok) throw new Error(`TMDB provider lookup returned ${response.status}.`);
             const data = await response.json();
             const providerIdsByName = new Map();
@@ -998,7 +1026,6 @@ async function loadTrendingDiscover() {
         const queryJobs = mediaTypes.flatMap(mediaType => languages.map(languageCode => ({ mediaType, languageCode })));
         const resultSets = await Promise.all(queryJobs.map(async ({ mediaType, languageCode }) => {
             const params = new URLSearchParams({
-                api_key: TMDB_API_KEY,
                 watch_region: 'IN',
                 with_watch_monetization_types: 'flatrate',
                 'vote_count.gte': '5',
@@ -1024,7 +1051,7 @@ async function loadTrendingDiscover() {
                 }
             }
 
-            const response = await fetch(`https://api.themoviedb.org/3/discover/${mediaType}?${params.toString()}`);
+            const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
             if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
             const data = await response.json();
             return { languageCode, candidates: (data.results || []).map(result => mapTrendingResult(result, mediaType)) };
