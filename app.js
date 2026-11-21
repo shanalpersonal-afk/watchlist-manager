@@ -47,6 +47,8 @@ let tourTarget = null;
 let tourOriginalStyles = null;
 let tourStartingView = null;
 let currentViewName = 'library';
+let bulkReviewItems = [];
+let bulkUploadCounts = { added: 0, skipped: 0, notFound: 0, processed: 0, total: 0, failures: 0 };
 
 const WATCHLIST_TOUR_STEPS = [
     { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
@@ -480,12 +482,13 @@ async function searchTMDBCandidates(query) {
                 rating: result.vote_average ? result.vote_average.toFixed(1) : 'N/A',
                 language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
                 genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
-                poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null
+                poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+                popularity: result.popularity || 0
             };
         });
 }
 
-function isCandidateAlreadySaved(candidate) {
+function isAlreadyInWatchlist(candidate) {
     const candidateTitle = candidate.title.trim().toLocaleLowerCase();
     const candidateYear = String(candidate.year || 'N/A');
     return currentWatchlistItems.some(item =>
@@ -543,10 +546,20 @@ function renderCandidateResults(candidates) {
         addButton.dataset.tmdbId = String(candidate.id);
         addButton.dataset.mediaType = candidate.mediaType;
         addButton.className = 'shrink-0 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:cursor-default disabled:opacity-70';
-        const alreadySaved = isCandidateAlreadySaved(candidate);
+        const alreadySaved = isAlreadyInWatchlist(candidate);
         addButton.textContent = alreadySaved ? '✓ Already Saved' : '+ Add to Watchlist';
         addButton.disabled = alreadySaved;
-        addButton.addEventListener('click', () => addCandidateToWatchlist(candidate));
+        addButton.addEventListener('click', async () => {
+            try {
+                const saved = await saveCandidateToWatchlist(candidate, addButton);
+                if (!saved) {
+                    addButton.disabled = true;
+                    addButton.textContent = '✓ Already Saved';
+                }
+            } catch (error) {
+                alert(`Could not add title: ${error.message}`);
+            }
+        });
         details.append(info, addButton);
         card.appendChild(details);
         container.appendChild(card);
@@ -588,16 +601,12 @@ async function fetchIndiaProviders(mediaType, tmdbId) {
     }
 }
 
-async function addCandidateToWatchlist(candidate) {
+async function saveCandidateToWatchlist(candidate, button = null) {
     const user = currentUser;
     if (!user || !db) {
-        alert('Please sign in before adding titles.');
-        return;
+        throw new Error('Please sign in before adding titles.');
     }
-    if (isCandidateAlreadySaved(candidate)) return;
-
-    const button = [...document.querySelectorAll('#candidateResults button[data-tmdb-id]')]
-        .find(element => element.dataset.tmdbId === String(candidate.id) && element.dataset.mediaType === candidate.mediaType);
+    if (isAlreadyInWatchlist(candidate)) return false;
     if (button) {
         button.disabled = true;
         button.textContent = 'Adding...';
@@ -623,13 +632,80 @@ async function addCandidateToWatchlist(candidate) {
             userId: user.uid
         });
         if (button) button.textContent = '✓ Added';
+        return true;
     } catch (error) {
         if (button) {
             button.disabled = false;
             button.textContent = '+ Add to Watchlist';
         }
-        alert(`Could not add title: ${error.message}`);
+        throw error;
     }
+}
+
+function updateBulkStatus() {
+    const statusText = document.getElementById('bulkStatusText');
+    if (!statusText) return;
+    const { added, skipped, notFound, processed, total, failures } = bulkUploadCounts;
+    const summary = `Added: ${added} • Already Saved: ${skipped} • Needs Review: ${bulkReviewItems.length} • Not Found: ${notFound}`;
+    statusText.textContent = total && processed < total
+        ? `${summary} • Processing: ${processed}/${total}${failures ? ` • Failed: ${failures}` : ''}`
+        : `${summary}${failures ? ` • Failed: ${failures}` : ''}`;
+}
+
+function renderBulkReviewContainer() {
+    const container = document.getElementById('bulkReviewContainer');
+    if (!container) return;
+    container.replaceChildren();
+    container.classList.toggle('hidden', bulkReviewItems.length === 0);
+    if (bulkReviewItems.length === 0) {
+        updateBulkStatus();
+        return;
+    }
+
+    const heading = document.createElement('h3');
+    heading.textContent = 'Review these matches';
+    heading.className = 'text-sm font-bold text-slate-800 dark:text-slate-100';
+    container.appendChild(heading);
+
+    bulkReviewItems.forEach(review => {
+        const row = document.createElement('div');
+        row.className = 'rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3';
+        const query = document.createElement('p');
+        query.textContent = `Choose the right match for “${review.query}”`;
+        query.className = 'mb-2 text-xs font-bold text-slate-800 dark:text-slate-100';
+        row.appendChild(query);
+
+        const choices = document.createElement('div');
+        choices.className = 'flex flex-wrap gap-2';
+        review.candidates.forEach(candidate => {
+            const choice = document.createElement('button');
+            choice.type = 'button';
+            choice.className = 'flex items-center gap-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-left text-xs hover:border-sky-400 disabled:opacity-70';
+            choice.textContent = `+ ${candidate.title} (${candidate.year}, ${candidate.mediaType === 'tv' ? 'TV' : 'Movie'})`;
+            choice.addEventListener('click', async () => {
+                choice.disabled = true;
+                choice.textContent = `Adding ${candidate.title}...`;
+                try {
+                    const saved = await saveCandidateToWatchlist(candidate, choice);
+                    if (!saved) {
+                        choice.textContent = `✓ ${candidate.title} — Already Saved`;
+                        return;
+                    }
+                    bulkReviewItems = bulkReviewItems.filter(item => item !== review);
+                    bulkUploadCounts.added += 1;
+                    renderBulkReviewContainer();
+                } catch (error) {
+                    choice.disabled = false;
+                    choice.textContent = `+ ${candidate.title} (${candidate.year})`;
+                    alert(`Could not add title: ${error.message}`);
+                }
+            });
+            choices.appendChild(choice);
+        });
+        row.appendChild(choices);
+        container.appendChild(row);
+    });
+    updateBulkStatus();
 }
 
 function renderWatchlist() {
@@ -822,6 +898,7 @@ async function bulkUploadItems() {
     const progressBar = document.getElementById('bulkProgressBar');
     const statusText = document.getElementById('bulkStatusText');
     const uploadButton = document.getElementById('bulkUploadButton');
+    const reviewContainer = document.getElementById('bulkReviewContainer');
     const titles = [...new Set((textarea?.value || '').split(/[\n,]+/).map(title => title.trim()).filter(Boolean))];
 
     if (!currentUser) {
@@ -844,41 +921,44 @@ async function bulkUploadItems() {
     if (progressContainer) progressContainer.classList.remove('hidden');
     if (uploadButton) uploadButton.disabled = true;
     if (progressBar) progressBar.style.width = '0%';
+    if (reviewContainer) reviewContainer.classList.toggle('hidden', bulkReviewItems.length === 0);
+    bulkUploadCounts = { added: 0, skipped: 0, notFound: 0, processed: 0, total: titles.length, failures: 0 };
+    updateBulkStatus();
 
-    let added = 0;
     const failures = [];
     try {
         for (let index = 0; index < titles.length; index += 1) {
             const title = titles[index];
-            if (statusText) statusText.textContent = `Processing ${index + 1} of ${titles.length}: ${title}`;
-
             try {
-                const metadata = await fetchTMDBDetails(title);
-                if (!metadata.valid) {
+                const candidates = await searchTMDBCandidates(title);
+                if (candidates.length === 0) {
                     failures.push(title);
+                    bulkUploadCounts.notFound += 1;
+                } else if (isAlreadyInWatchlist(candidates[0])) {
+                    bulkUploadCounts.skipped += 1;
+                } else if (
+                    candidates.length === 1 ||
+                    candidates[0].popularity >= (candidates[1]?.popularity || 0) * 2.5
+                ) {
+                    const saved = await saveCandidateToWatchlist(candidates[0]);
+                    if (saved) bulkUploadCounts.added += 1;
+                    else bulkUploadCounts.skipped += 1;
                 } else {
-                    const { valid, ...item } = metadata;
-                    await db.collection('watchlist').add({
-                        ...item,
-                        watched: false,
-                        addedBy: currentUser.displayName || currentUser.email,
-                        userId: currentUser.uid
-                    });
-                    added += 1;
+                    bulkReviewItems.push({ query: title, candidates });
+                    renderBulkReviewContainer();
                 }
             } catch (error) {
                 failures.push(title);
+                bulkUploadCounts.failures += 1;
             }
 
+            bulkUploadCounts.processed = index + 1;
             if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / titles.length) * 100)}%`;
+            updateBulkStatus();
             if (index < titles.length - 1) await sleep(250);
         }
         if (textarea) textarea.value = failures.join('\n');
-        if (statusText) {
-            statusText.textContent = failures.length
-                ? `Complete: added ${added} of ${titles.length}. Could not add: ${failures.join(', ')}.`
-                : `Complete: added ${added} of ${titles.length} titles.`;
-        }
+        if (failures.length && statusText) statusText.textContent += ` • Retry: ${failures.join(', ')}`;
     } finally {
         if (uploadButton) uploadButton.disabled = false;
     }
