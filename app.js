@@ -45,13 +45,16 @@ let tourOpenedBulkPanel = false;
 let tourOpenedFilterDrawer = false;
 let tourTarget = null;
 let tourOriginalStyles = null;
+let tourStartingView = null;
+let currentViewName = 'library';
 
 const WATCHLIST_TOUR_STEPS = [
-    { selector: '#title', title: 'Add a title', description: 'Search for a movie or TV show here, then add it to your watchlist.' },
-    { selector: '#bulkUploadToggle', title: 'Bulk upload', description: 'Open this panel to add several titles from a list, one title per line.' },
-    { selector: '#filterDrawer', title: 'Filter your watchlist', description: 'Use filters, grouping, and sorting to find titles. On a phone, this drawer opens for the tour.' },
-    { selector: '#primaryGroupSelect', title: 'Group your titles', description: 'Choose a primary group to organize your watchlist into collapsible sections.' },
-    { selector: '#watchlistDisplay', title: 'Your watchlist', description: 'Your titles appear here. Select a card to use the batch actions above.' }
+    { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
+    { selector: '#filterDrawer', title: 'Filter your library', description: 'Filter, sort, or group your saved titles. On a phone, the filter drawer opens for this step.' },
+    { selector: '#primaryGroupSelect', title: 'Group your titles', description: 'Choose a primary group to arrange your library into collapsible sections.' },
+    { selector: '#navAddBtn', title: 'Add Titles', description: 'Open Add Titles to search TMDB and add a specific movie or show.' },
+    { selector: '#candidateSearchInput', title: 'Smart Title Search', description: 'Search once and pick the correct movie or TV show from the best matches.' },
+    { selector: '#bulkUploadToggle', title: 'Bulk Upload', description: 'Add several titles at once by entering one title per line.' }
 ];
 
 // ==========================================
@@ -72,6 +75,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tourNextBtn) tourNextBtn.addEventListener('click', advanceWatchlistTour);
     const tourSkipBtn = document.getElementById('tourSkipBtn');
     if (tourSkipBtn) tourSkipBtn.addEventListener('click', endWatchlistTour);
+    document.getElementById('candidateSearchBtn')?.addEventListener('click', searchCandidateInput);
+    document.getElementById('candidateSearchInput')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            searchCandidateInput();
+        }
+    });
+    switchView('library');
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
 
@@ -107,12 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function startWatchlistTour() {
     endWatchlistTour();
-    const bulkToggle = document.getElementById('bulkUploadToggle');
-    const bulkPanel = bulkToggle?.closest('details');
-    if (bulkPanel && !bulkPanel.open) {
-        tourOpenedBulkPanel = true;
-        bulkPanel.open = true;
-    }
+    tourStartingView = currentViewName;
     activeTourStep = 0;
     showWatchlistTourStep();
 }
@@ -127,6 +133,19 @@ function showWatchlistTourStep() {
     }
     tourTarget = document.querySelector(step.selector);
     if (!tourTarget) return advanceWatchlistTour();
+
+    const targetView = tourTarget.closest('#libraryView, #addView');
+    if (tourTarget.id === 'navLibraryBtn') switchView('library');
+    else if (tourTarget.id === 'navAddBtn') switchView('add');
+    else if (targetView) switchView(targetView.id === 'addView' ? 'add' : 'library');
+
+    if (step.selector === '#bulkUploadToggle') {
+        const panel = tourTarget.closest('details');
+        if (panel && !panel.open) {
+            tourOpenedBulkPanel = true;
+            panel.open = true;
+        }
+    }
 
     tourOriginalStyles = {
         outline: tourTarget.style.outline,
@@ -196,12 +215,34 @@ function endWatchlistTour() {
         if (panel) panel.open = false;
     }
     if (tourOpenedFilterDrawer) document.getElementById('filterDrawer')?.classList.add('hidden');
+    if (tourStartingView) switchView(tourStartingView);
 
     activeTourStep = -1;
     tourTarget = null;
     tourOriginalStyles = null;
     tourOpenedBulkPanel = false;
     tourOpenedFilterDrawer = false;
+    tourStartingView = null;
+}
+
+function switchView(viewName) {
+    if (viewName !== 'library' && viewName !== 'add') return;
+    currentViewName = viewName;
+    document.getElementById('libraryView')?.classList.toggle('hidden', viewName !== 'library');
+    document.getElementById('addView')?.classList.toggle('hidden', viewName !== 'add');
+
+    const activeClasses = ['bg-sky-500', 'text-white', 'border-sky-500'];
+    const inactiveClasses = ['bg-white', 'dark:bg-slate-900', 'text-slate-700', 'dark:text-slate-200', 'border-slate-300', 'dark:border-slate-800', 'hover:border-sky-400'];
+    [['navLibraryBtn', 'library'], ['navAddBtn', 'add']].forEach(([buttonId, buttonView]) => {
+        const button = document.getElementById(buttonId);
+        if (!button) return;
+        button.classList.remove(...activeClasses, ...inactiveClasses);
+        button.classList.add(...(buttonView === viewName ? activeClasses : inactiveClasses));
+        button.setAttribute('aria-current', buttonView === viewName ? 'page' : 'false');
+    });
+
+    const nextHash = viewName === 'library' ? '#library' : '#add';
+    if (window.location.hash !== nextHash) window.location.hash = nextHash;
 }
 
 function loginWithGoogle() {
@@ -409,6 +450,188 @@ async function fetchTMDBDetails(queryTitle) {
     return { valid: false, error: `Could not find "${cleanTitle}".` };
 }
 
+async function searchTMDBCandidates(query) {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return [];
+
+    const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanQuery)}`);
+    if (!response.ok) throw new Error(`TMDB search failed (${response.status}).`);
+    const data = await response.json();
+    const normalizedQuery = cleanQuery.toLocaleLowerCase();
+
+    return (data.results || [])
+        .filter(result => result.media_type === 'movie' || result.media_type === 'tv')
+        .sort((a, b) => {
+            const aExact = [a.title, a.name, a.original_title, a.original_name]
+                .some(title => title && title.trim().toLocaleLowerCase() === normalizedQuery);
+            const bExact = [b.title, b.name, b.original_title, b.original_name]
+                .some(title => title && title.trim().toLocaleLowerCase() === normalizedQuery);
+            return Number(bExact) - Number(aExact) || (b.popularity || 0) - (a.popularity || 0);
+        })
+        .slice(0, 4)
+        .map(result => {
+            const languageCode = result.original_language;
+            const genreId = result.genre_ids?.[0];
+            return {
+                id: result.id,
+                mediaType: result.media_type,
+                title: result.title || result.name,
+                year: (result.release_date || result.first_air_date || '').split('-')[0] || 'N/A',
+                rating: result.vote_average ? result.vote_average.toFixed(1) : 'N/A',
+                language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
+                genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
+                poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null
+            };
+        });
+}
+
+function isCandidateAlreadySaved(candidate) {
+    const candidateTitle = candidate.title.trim().toLocaleLowerCase();
+    const candidateYear = String(candidate.year || 'N/A');
+    return currentWatchlistItems.some(item =>
+        (item.tmdbId !== undefined && String(item.tmdbId) === String(candidate.id)) ||
+        ((item.title || '').trim().toLocaleLowerCase() === candidateTitle && String(item.year || 'N/A') === candidateYear)
+    );
+}
+
+function renderCandidateResults(candidates) {
+    const container = document.getElementById('candidateResults');
+    if (!container) return;
+    container.replaceChildren();
+
+    if (candidates.length === 0) {
+        container.textContent = 'No movie or TV show matches found.';
+        container.className = 'mt-4 text-sm text-slate-500 dark:text-slate-400';
+        return;
+    }
+    container.className = 'mt-4 grid gap-3';
+
+    candidates.forEach(candidate => {
+        const card = document.createElement('article');
+        card.className = 'flex flex-col sm:flex-row gap-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3';
+
+        if (candidate.poster) {
+            const poster = document.createElement('img');
+            poster.src = candidate.poster;
+            poster.alt = `Poster for ${candidate.title}`;
+            poster.loading = 'lazy';
+            poster.className = 'h-32 w-24 rounded object-cover';
+            card.appendChild(poster);
+        } else {
+            const posterFallback = document.createElement('div');
+            posterFallback.textContent = '🎬';
+            posterFallback.className = 'flex h-32 w-24 shrink-0 items-center justify-center rounded bg-slate-200 dark:bg-slate-800 text-3xl';
+            card.appendChild(posterFallback);
+        }
+
+        const details = document.createElement('div');
+        details.className = 'flex min-w-0 flex-1 flex-col items-start justify-between gap-3 sm:flex-row sm:items-center';
+        const info = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = candidate.title;
+        title.className = 'font-bold text-slate-900 dark:text-slate-100';
+        const typeBadge = document.createElement('span');
+        typeBadge.textContent = candidate.mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie';
+        typeBadge.className = 'mt-1 inline-flex rounded-full bg-sky-100 dark:bg-sky-950 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:text-sky-300';
+        const metadata = document.createElement('p');
+        metadata.textContent = `${candidate.year} · ${candidate.language} · ⭐ ${candidate.rating} · ${candidate.genre}`;
+        metadata.className = 'mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400';
+        info.append(title, typeBadge, metadata);
+
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.dataset.tmdbId = String(candidate.id);
+        addButton.dataset.mediaType = candidate.mediaType;
+        addButton.className = 'shrink-0 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:cursor-default disabled:opacity-70';
+        const alreadySaved = isCandidateAlreadySaved(candidate);
+        addButton.textContent = alreadySaved ? '✓ Already Saved' : '+ Add to Watchlist';
+        addButton.disabled = alreadySaved;
+        addButton.addEventListener('click', () => addCandidateToWatchlist(candidate));
+        details.append(info, addButton);
+        card.appendChild(details);
+        container.appendChild(card);
+    });
+}
+
+async function searchCandidateInput() {
+    const input = document.getElementById('candidateSearchInput');
+    const button = document.getElementById('candidateSearchBtn');
+    const container = document.getElementById('candidateResults');
+    const query = input?.value.trim() || '';
+    if (!container) return;
+    if (!query) {
+        container.textContent = 'Enter a title to search.';
+        return;
+    }
+
+    if (button) button.disabled = true;
+    container.className = 'mt-4 text-sm text-slate-500 dark:text-slate-400';
+    container.textContent = 'Searching TMDB...';
+    try {
+        renderCandidateResults(await searchTMDBCandidates(query));
+    } catch (error) {
+        container.textContent = `Could not search TMDB: ${error.message}`;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+async function fetchIndiaProviders(mediaType, tmdbId) {
+    try {
+        const response = await fetch(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`);
+        const data = await response.json();
+        const rawProviders = data.results?.IN?.flatrate?.map(provider => provider.provider_name) || [];
+        const platforms = [...new Set(rawProviders.map(normalizePlatformName))];
+        return { platforms, platform: platforms[0] || 'Not Streaming in IN' };
+    } catch (error) {
+        return { platforms: [], platform: 'Not Streaming in IN' };
+    }
+}
+
+async function addCandidateToWatchlist(candidate) {
+    const user = currentUser;
+    if (!user || !db) {
+        alert('Please sign in before adding titles.');
+        return;
+    }
+    if (isCandidateAlreadySaved(candidate)) return;
+
+    const button = [...document.querySelectorAll('#candidateResults button[data-tmdb-id]')]
+        .find(element => element.dataset.tmdbId === String(candidate.id) && element.dataset.mediaType === candidate.mediaType);
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Adding...';
+    }
+
+    try {
+        const providers = await fetchIndiaProviders(candidate.mediaType, candidate.id);
+        if (currentUser?.uid !== user.uid) throw new Error('Your sign-in changed. Please search again.');
+        await db.collection('watchlist').add({
+            tmdbId: candidate.id,
+            type: candidate.mediaType,
+            typeLabel: candidate.mediaType === 'tv' ? '📺 TV Show' : '🎬 Movie',
+            title: candidate.title,
+            year: candidate.year,
+            genre: candidate.genre,
+            rating: candidate.rating,
+            language: candidate.language,
+            poster: candidate.poster,
+            platform: providers.platform,
+            platforms: providers.platforms,
+            watched: false,
+            addedBy: user.displayName || user.email,
+            userId: user.uid
+        });
+        if (button) button.textContent = '✓ Added';
+    } catch (error) {
+        if (button) {
+            button.disabled = false;
+            button.textContent = '+ Add to Watchlist';
+        }
+        alert(`Could not add title: ${error.message}`);
+    }
+}
+
 function renderWatchlist() {
     const container = document.getElementById('watchlistDisplay');
     if (!container) return;
@@ -424,6 +647,16 @@ function renderWatchlist() {
 
     container.innerHTML = '';
     renderedDocIds = new Set();
+    if (currentWatchlistItems.length === 0) {
+        container.innerHTML = `
+            <div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-12 text-center">
+                <p class="text-lg font-bold text-slate-800 dark:text-slate-100">Your library is ready for its first title.</p>
+                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Search for a movie or show and add it to your watchlist.</p>
+                <button type="button" onclick="switchView('add')" class="mt-4 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600">Find a title</button>
+            </div>`;
+        updateBatchActionUI();
+        return;
+    }
     let items = getWatchlist();
 
     if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
@@ -579,50 +812,6 @@ async function refreshMetadata(docId) {
 // ==========================================
 // 5. Data Mutations (Watched / Add / Delete)
 // ==========================================
-async function addItem() {
-    if (!currentUser) {
-        alert('Please sign in before adding titles.');
-        return;
-    }
-
-    const titleInput = document.getElementById('title');
-    const rawTitle = titleInput ? titleInput.value.trim() : '';
-
-    if (rawTitle === '') {
-        alert('Please enter a title!');
-        return;
-    }
-
-    const apiResult = await fetchTMDBDetails(rawTitle);
-    
-    if (!apiResult.valid) {
-        alert(`❌ ${apiResult.error}`);
-        return;
-    }
-
-    const newItem = {
-        title: apiResult.title,
-        type: apiResult.type,
-        typeLabel: apiResult.typeLabel,
-        platform: apiResult.platform,
-        platforms: apiResult.platforms,
-        genre: apiResult.genre,
-        rating: apiResult.rating,
-        language: apiResult.language,
-        year: apiResult.year,
-        poster: apiResult.poster,
-        watched: false,
-        addedBy: currentUser.displayName || currentUser.email,
-        userId: currentUser.uid
-    };
-
-    if (db) {
-        await db.collection('watchlist').add(newItem);
-    }
-
-    if (titleInput) titleInput.value = '';
-}
-
 function sleep(milliseconds) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
