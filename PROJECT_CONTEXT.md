@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.10.0**
+**Current version: v2.11.0**
 
 ## 1. Project Vision
 
@@ -17,7 +17,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and TMDB API key. `index.html` loads it immediately before `app.js`; app code reads the values from `window.APP_CONFIG`.
 
-## 3. Completed Features Through v2.10.0
+## 3. Completed Features Through v2.11.0
 
 ### Authentication and private libraries
 
@@ -40,14 +40,16 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Review choices use the same candidate save flow and remove the review row after a successful add.
 - The **Smart Social Text Parser** cleans messy Instagram, YouTube, WhatsApp, and Reddit captions/lists into ordered, deduplicated titles. It strips links, hashtags, emojis, bullets, common CTA lines, and trailing platform/year/language tags before users review and upload the extracted list.
 
-### India discovery and subscriptions
+### India discovery and profile preferences
 
 - Add Titles contains an on-demand **Trending & Discover in India** panel with type, genre, language, platform, freshness, and sort controls.
 - Discovery always uses TMDB India `/discover/movie` and/or `/discover/tv` queries with flat-rate availability and a minimum vote count. The default **Last 6 Months** filter uses movie digital/OTT release dates (release type 4) and TV air dates; **All-Time Popular** removes the date window.
 - Platform discovery fetches the India movie provider list once per browser session, normalizes provider names, and maps each service to pipe-separated TMDB provider IDs. Results from movie and TV queries merge by the selected popularity or newest-first sort.
 - Results are capped at 12 and cached by all six filters. The dashboard footer credits TMDB and JustWatch for streaming availability.
-- **My OTTs** stores each user’s selected services in local storage under `watchlist_subs_<uid>` (or `watchlist_subs_guest` when signed out).
-- **Watchable Now** filters the library to subscribed normalized platforms; matching cards show an “On Your OTT” marker. If no subscriptions are saved, the subscription modal opens first.
+- A clickable avatar and name open **Profile & Preferences**, with checkbox groups for OTT subscriptions, preferred languages, and preferred genres.
+- Profile preferences load from `users/{uid}` in Firestore and fall back to `watchlist_profile_<uid>` in local storage. Firestore permission failures leave local preferences available.
+- Discover can default to **My Subscriptions** and **My Languages**. It combines provider IDs for all selected services and queries each preferred language, then interleaves and deduplicates results for balanced recommendations.
+- **Watchable Now** filters the library to subscribed normalized platforms; matching cards show an “On Your OTT” marker. If no subscriptions are saved, the profile modal opens first.
 
 ### Other library features
 
@@ -60,14 +62,14 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 ### Files
 
 - `config.js` — `window.APP_CONFIG` Firebase and TMDB configuration.
-- `index.html` — splash, dashboard views, controls, discovery panel, subscriptions modal, and script loading order.
+- `index.html` — splash, dashboard views, controls, discovery panel, profile preferences modal, and script loading order.
 - `app.js` — auth/listener lifecycle, candidate and discovery workflows, rendering, local preferences, and Firestore mutations.
 - `style.css` — legacy stylesheet; not loaded or used by the current app.
 
 ### Key functions in `app.js`
 
 - Views and tour: `switchView`, `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`.
-- User data: `setupFirebaseListener`, `getSubscriptionStorageKey`, `getUserSubscriptions`, `openSubscriptionsModal`, `saveSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
+- User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
 - Discovery: `fetchIndiaWatchProviderMap`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.

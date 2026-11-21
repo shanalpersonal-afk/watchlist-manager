@@ -38,6 +38,9 @@ const LANGUAGE_NAMES = {
 let unsubscribeWatchlist = null;
 let currentWatchlistItems = [];
 let currentUser = null;
+let userProfile = { subscriptions: [], languages: [], genres: [] };
+let userProfileUid = null;
+let userProfileLoadPromise = Promise.resolve();
 const selectedDocIds = new Set();
 let renderedDocIds = new Set();
 let activeTourStep = -1;
@@ -103,11 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
             searchCandidateInput();
         }
     });
-    document.getElementById('openSubscriptionsBtn')?.addEventListener('click', openSubscriptionsModal);
-    document.getElementById('closeSubscriptionsBtn')?.addEventListener('click', closeSubscriptionsModal);
-    document.getElementById('saveSubscriptionsBtn')?.addEventListener('click', saveSubscriptions);
-    document.getElementById('subscriptionsModal')?.addEventListener('click', event => {
-        if (event.target.id === 'subscriptionsModal') closeSubscriptionsModal();
+    document.getElementById('openProfileBtn')?.addEventListener('click', openProfileModal);
+    document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
+    document.getElementById('saveProfileBtn')?.addEventListener('click', saveUserProfile);
+    document.getElementById('profileModal')?.addEventListener('click', event => {
+        if (event.target.id === 'profileModal') closeProfileModal();
     });
     document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
         if (event.currentTarget.open) loadTrendingDiscover();
@@ -348,48 +351,121 @@ function toggleManageMode() {
     renderWatchlist();
 }
 
-function getSubscriptionStorageKey() {
-    return `watchlist_subs_${currentUser?.uid || 'guest'}`;
+// Profile storage: keep each signed-in user's local fallback under their UID.
+function getUserProfileStorageKey(uid = currentUser?.uid) {
+    return `watchlist_profile_${uid || 'guest'}`;
 }
 
+// Profile data: keep only the supported subscription, language, and genre choices.
+function normalizeUserProfile(profile) {
+    const source = profile && typeof profile === 'object' ? profile : {};
+    return {
+        subscriptions: Array.isArray(source.subscriptions) ? [...new Set(source.subscriptions.filter(value => OTT_SERVICES.includes(value)))] : [],
+        languages: Array.isArray(source.languages) ? [...new Set(source.languages.filter(value => Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, value)))] : [],
+        genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : []
+    };
+}
+
+// Watchable Now: expose subscriptions only when they belong to the active account.
 function getUserSubscriptions() {
+    return currentUser && userProfileUid === currentUser.uid ? userProfile.subscriptions : [];
+}
+
+// Discover defaults: select saved services and languages for personalized India discovery.
+function applyProfileDefaultsToDiscover() {
+    const profile = currentUser && userProfileUid === currentUser.uid ? userProfile : normalizeUserProfile(null);
+    const platformSelect = document.getElementById('trendingPlatform');
+    const languageSelect = document.getElementById('trendingLanguage');
+    if (platformSelect) platformSelect.value = profile.subscriptions.length ? 'my_subs' : 'All';
+    if (languageSelect) languageSelect.value = profile.languages.length ? 'my_langs' : 'All';
+}
+
+// Profile sync: load this user's local preferences first, then merge Firestore data when available.
+async function loadUserProfile() {
+    if (!currentUser) return;
+    const uid = currentUser.uid;
+    let localProfile = { subscriptions: [], languages: [], genres: [] };
     try {
-        const saved = JSON.parse(localStorage.getItem(getSubscriptionStorageKey()) || '[]');
-        return Array.isArray(saved) ? saved.filter(service => OTT_SERVICES.includes(service)) : [];
+        localProfile = normalizeUserProfile(JSON.parse(localStorage.getItem(getUserProfileStorageKey(uid)) || '{}'));
     } catch (error) {
-        return [];
+        localProfile = normalizeUserProfile(null);
     }
-}
-
-function openSubscriptionsModal() {
-    const subscriptions = new Set(getUserSubscriptions());
-    document.querySelectorAll('#subscriptionsModal [data-subscription]').forEach(input => {
-        input.checked = subscriptions.has(input.dataset.subscription);
-    });
-    document.getElementById('subscriptionsModal')?.classList.remove('hidden');
-}
-
-function closeSubscriptionsModal() {
-    document.getElementById('subscriptionsModal')?.classList.add('hidden');
-    pendingWatchableActivation = false;
-}
-
-function saveSubscriptions() {
-    const subscriptions = [...document.querySelectorAll('#subscriptionsModal [data-subscription]:checked')]
-        .map(input => input.dataset.subscription);
-    try {
-        localStorage.setItem(getSubscriptionStorageKey(), JSON.stringify(subscriptions));
-    } catch (error) {
-        alert('Could not save your subscriptions in this browser.');
-        return;
-    }
-
-    document.getElementById('subscriptionsModal')?.classList.add('hidden');
-    if (pendingWatchableActivation) onlyWatchableNow = subscriptions.length > 0;
-    else if (subscriptions.length === 0) onlyWatchableNow = false;
-    pendingWatchableActivation = false;
+    if (!currentUser || currentUser.uid !== uid) return;
+    userProfile = localProfile;
+    userProfileUid = uid;
+    applyProfileDefaultsToDiscover();
     updateWatchableNowButton();
     renderWatchlist();
+
+    try {
+        if (db) {
+            const snapshot = await db.collection('users').doc(uid).get();
+            if (currentUser?.uid === uid && snapshot.exists) {
+                userProfile = normalizeUserProfile({ ...userProfile, ...snapshot.data() });
+                try { localStorage.setItem(getUserProfileStorageKey(uid), JSON.stringify(userProfile)); } catch (error) { /* Keep the Firestore profile in memory. */ }
+            }
+        }
+    } catch (error) {
+        // Profile reads may be blocked until Firestore rules are configured; local preferences still work.
+    }
+    if (currentUser?.uid === uid) {
+        applyProfileDefaultsToDiscover();
+        updateWatchableNowButton();
+        renderWatchlist();
+    }
+}
+
+// Profile modal: show the currently loaded preferences in their checkbox groups.
+async function openProfileModal() {
+    if (currentUser && userProfileUid !== currentUser.uid) {
+        userProfileLoadPromise = loadUserProfile();
+        await userProfileLoadPromise;
+    } else {
+        await userProfileLoadPromise;
+    }
+    const profile = userProfileUid === currentUser?.uid ? userProfile : normalizeUserProfile(null);
+    document.querySelectorAll('#profileModal [data-profile-group]').forEach(input => {
+        input.checked = profile[input.dataset.profileGroup]?.includes(input.dataset.profileValue) || false;
+    });
+    document.getElementById('profileModal')?.classList.remove('hidden');
+}
+
+// Profile modal: close the dialog and cancel any pending Watchable Now activation.
+function closeProfileModal() {
+    document.getElementById('profileModal')?.classList.add('hidden');
+    pendingWatchableActivation = false;
+}
+
+// Profile sync: save preferences locally and attempt to sync them to the signed-in user's document.
+async function saveUserProfile() {
+    if (!currentUser) return;
+    const uid = currentUser.uid;
+    const profile = { subscriptions: [], languages: [], genres: [] };
+    document.querySelectorAll('#profileModal [data-profile-group]:checked').forEach(input => {
+        profile[input.dataset.profileGroup].push(input.dataset.profileValue);
+    });
+    userProfile = normalizeUserProfile(profile);
+    userProfileUid = uid;
+    try {
+        localStorage.setItem(getUserProfileStorageKey(uid), JSON.stringify(userProfile));
+    } catch (error) {
+        console.warn('Could not save profile preferences in local storage.', error);
+    }
+    const shouldEnableWatchableNow = pendingWatchableActivation;
+    document.getElementById('profileModal')?.classList.add('hidden');
+    trendingCache.clear();
+    if (shouldEnableWatchableNow) onlyWatchableNow = userProfile.subscriptions.length > 0;
+    else if (userProfile.subscriptions.length === 0) onlyWatchableNow = false;
+    pendingWatchableActivation = false;
+    applyProfileDefaultsToDiscover();
+    updateWatchableNowButton();
+    renderWatchlist();
+    if (document.getElementById('trendingPanel')?.open) loadTrendingDiscover();
+    try {
+        if (db) await db.collection('users').doc(uid).set(userProfile, { merge: true });
+    } catch (error) {
+        // Local storage remains the fallback when profile writes are not allowed.
+    }
 }
 
 function updateWatchableNowButton() {
@@ -403,7 +479,7 @@ function updateWatchableNowButton() {
 function toggleWatchableNow() {
     if (!onlyWatchableNow && getUserSubscriptions().length === 0) {
         pendingWatchableActivation = true;
-        openSubscriptionsModal();
+        openProfileModal();
         return;
     }
     onlyWatchableNow = !onlyWatchableNow;
@@ -438,6 +514,7 @@ function logoutUser() {
 }
 
 function setupFirebaseListener() {
+    if (currentUser) userProfileLoadPromise = loadUserProfile();
     if (unsubscribeWatchlist) {
         unsubscribeWatchlist();
         unsubscribeWatchlist = null;
@@ -872,7 +949,9 @@ async function loadTrendingDiscover() {
     const platform = document.getElementById('trendingPlatform')?.value || 'All';
     const freshness = document.getElementById('trendingFreshness')?.value || '6m';
     const sort = document.getElementById('trendingSort')?.value || 'popularity';
-    const cacheKey = `${type}|${genre}|${language}|${platform}|${freshness}|${sort}`;
+    const profile = currentUser && userProfileUid === currentUser.uid ? userProfile : normalizeUserProfile(null);
+    const profileCacheKey = `${profile.subscriptions.join(',')}|${profile.languages.join(',')}`;
+    const cacheKey = `${type}|${genre}|${language}|${platform}|${freshness}|${sort}|${profileCacheKey}`;
     const requestToken = ++trendingLoadToken;
 
     if (trendingCache.has(cacheKey)) {
@@ -887,7 +966,13 @@ async function loadTrendingDiscover() {
         let providerIds = null;
         if (platform !== 'All') {
             const providerMap = await fetchIndiaWatchProviderMap();
-            providerIds = providerMap.get(normalizePlatformName(platform));
+            if (platform === 'my_subs') {
+                providerIds = [...new Set(profile.subscriptions.flatMap(service =>
+                    (providerMap.get(normalizePlatformName(service)) || '').split('|').filter(Boolean)
+                ))].join('|');
+            } else {
+                providerIds = providerMap.get(normalizePlatformName(platform));
+            }
             if (!providerIds) {
                 trendingCache.set(cacheKey, []);
                 if (requestToken === trendingLoadToken) renderTrendingShelf([]);
@@ -903,7 +988,15 @@ async function loadTrendingDiscover() {
         const today = formatTrendingDate(todayDate);
         const startDate = formatTrendingDate(sixMonthsAgo);
 
-        const resultSets = await Promise.all(mediaTypes.map(async mediaType => {
+        const languages = language === 'my_langs' ? profile.languages : [language];
+        if (languages.length === 0) {
+            trendingCache.set(cacheKey, []);
+            if (requestToken === trendingLoadToken) renderTrendingShelf([]);
+            return;
+        }
+
+        const queryJobs = mediaTypes.flatMap(mediaType => languages.map(languageCode => ({ mediaType, languageCode })));
+        const resultSets = await Promise.all(queryJobs.map(async ({ mediaType, languageCode }) => {
             const params = new URLSearchParams({
                 api_key: TMDB_API_KEY,
                 watch_region: 'IN',
@@ -917,7 +1010,7 @@ async function loadTrendingDiscover() {
 
             const genreId = genre !== 'All' ? TRENDING_GENRE_IDS[genre]?.[mediaType] : null;
             if (genreId) params.set('with_genres', String(genreId));
-            if (language !== 'All') params.set('with_original_language', language);
+            if (languageCode !== 'All') params.set('with_original_language', languageCode);
 
             if (freshness === '6m') {
                 if (mediaType === 'movie') {
@@ -934,14 +1027,39 @@ async function loadTrendingDiscover() {
             const response = await fetch(`https://api.themoviedb.org/3/discover/${mediaType}?${params.toString()}`);
             if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
             const data = await response.json();
-            return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+            return { languageCode, candidates: (data.results || []).map(result => mapTrendingResult(result, mediaType)) };
         }));
 
-        let candidates = resultSets.flat();
-        candidates.sort((a, b) => sort === 'newest'
+        const sortCandidates = candidates => candidates.sort((a, b) => sort === 'newest'
             ? (Date.parse(b.sortDate) || 0) - (Date.parse(a.sortDate) || 0)
             : b.popularity - a.popularity);
-        candidates = candidates.slice(0, 12);
+        let candidates;
+        if (language === 'my_langs') {
+            const byLanguage = new Map();
+            resultSets.forEach(({ languageCode, candidates: results }) => {
+                if (!byLanguage.has(languageCode)) byLanguage.set(languageCode, []);
+                byLanguage.get(languageCode).push(...results);
+            });
+            const languageQueues = [...byLanguage.values()].map(sortCandidates);
+            candidates = [];
+            const seenIds = new Set();
+            while (candidates.length < 12 && languageQueues.some(queue => queue.length)) {
+                languageQueues.forEach(queue => {
+                    while (queue.length && candidates.length < 12) {
+                        const candidate = queue.shift();
+                        const id = String(candidate.id);
+                        if (seenIds.has(id)) continue;
+                        seenIds.add(id);
+                        candidates.push(candidate);
+                        break;
+                    }
+                });
+            }
+        } else {
+            candidates = sortCandidates(resultSets.flatMap(resultSet => resultSet.candidates));
+            candidates = [...new Map(candidates.map(candidate => [String(candidate.id), candidate])).values()];
+            candidates = candidates.slice(0, 12);
+        }
         trendingCache.set(cacheKey, candidates);
         if (requestToken === trendingLoadToken) renderTrendingShelf(candidates);
     } catch (error) {

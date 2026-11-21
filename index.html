@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio v2.10.0</title>
+    <title>Watchlist Studio v2.11.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -42,15 +42,16 @@
     <div id="appDashboard" class="hidden">
         <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.10.0</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.11.0</span></h1>
             </div>
             <div class="flex items-center gap-3">
                 <button id="startTourBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
-                <button id="openSubscriptionsBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">📺 My OTTs</button>
                 <button onclick="toggleTheme()" class="p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-sm hover:border-sky-400 transition-colors">☀️/🌙</button>
                 <div id="userProfileInfo" class="flex items-center gap-2">
+                    <button id="openProfileBtn" type="button" title="Profile &amp; Preferences" aria-label="Profile &amp; Preferences" class="flex cursor-pointer items-center gap-2 rounded-full px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <img id="userAvatar" class="w-8 h-8 rounded-full border border-sky-400" src="" alt="User">
                     <span id="userNameDisplay" class="text-xs font-semibold text-slate-700 dark:text-slate-300"></span>
+                    </button>
                     <button id="signOutBtn" class="text-xs bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-200 dark:hover:bg-rose-900">Sign Out</button>
                 </div>
             </div>
@@ -144,11 +145,11 @@
                             </div>
                             <div>
                                 <label for="trendingLanguage" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Language</label>
-                                <select id="trendingLanguage" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="en">English</option><option value="hi">Hindi</option><option value="ko">Korean</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="ja">Japanese</option></select>
+                                <select id="trendingLanguage" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="my_langs">✨ My Languages</option><option value="en">English</option><option value="hi">Hindi</option><option value="ko">Korean</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="ja">Japanese</option></select>
                             </div>
                             <div>
                                 <label for="trendingPlatform" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platform</label>
-                                <select id="trendingPlatform" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All Platforms</option><option value="Netflix">Netflix</option><option value="Prime Video">Prime Video</option><option value="Disney+ Hotstar">Disney+ Hotstar</option><option value="JioCinema">JioCinema</option><option value="Zee5">Zee5</option><option value="SonyLIV">SonyLIV</option></select>
+                                <select id="trendingPlatform" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All Platforms</option><option value="my_subs">✨ My Subscriptions</option><option value="Netflix">Netflix</option><option value="Prime Video">Prime Video</option><option value="Disney+ Hotstar">Disney+ Hotstar</option><option value="JioCinema">JioCinema</option><option value="Zee5">Zee5</option><option value="SonyLIV">SonyLIV</option></select>
                             </div>
                             <div>
                                 <label for="trendingFreshness" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Freshness</label>
@@ -190,21 +191,47 @@
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">Streaming availability powered by TMDB &amp; JustWatch.</footer>
     </div>
 
-    <div id="subscriptionsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="subscriptionsTitle">
-        <div class="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
-            <h2 id="subscriptionsTitle" class="text-lg font-extrabold">My Subscriptions</h2>
-            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose your services to highlight what you can watch now.</p>
-            <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Netflix" class="accent-sky-500">Netflix</label>
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Prime Video" class="accent-sky-500">Prime Video</label>
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Disney+ Hotstar" class="accent-sky-500">Disney+ Hotstar</label>
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="JioCinema" class="accent-sky-500">JioCinema</label>
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="Zee5" class="accent-sky-500">Zee5</label>
-                <label class="flex items-center gap-2"><input type="checkbox" data-subscription="SonyLIV" class="accent-sky-500">SonyLIV</label>
+    <div id="profileModal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+        <div class="my-auto w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
+            <h2 id="profileTitle" class="text-lg font-extrabold">Profile &amp; Preferences</h2>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose your streaming services, preferred languages, and genres.</p>
+            <div class="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+                <fieldset><legend class="mb-2 text-xs font-bold uppercase text-slate-500">My OTT Subscriptions</legend><div class="grid gap-2">
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Netflix" class="accent-sky-500">Netflix</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Prime Video" class="accent-sky-500">Prime Video</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Disney+ Hotstar" class="accent-sky-500">Disney+ Hotstar</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="JioCinema" class="accent-sky-500">JioCinema</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Zee5" class="accent-sky-500">Zee5</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="SonyLIV" class="accent-sky-500">SonyLIV</label>
+                </div></fieldset>
+                <fieldset><legend class="mb-2 text-xs font-bold uppercase text-slate-500">Preferred Languages</legend><div class="grid gap-2">
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="en" class="accent-sky-500">English</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="hi" class="accent-sky-500">Hindi</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="ko" class="accent-sky-500">Korean</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="ta" class="accent-sky-500">Tamil</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="te" class="accent-sky-500">Telugu</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="ml" class="accent-sky-500">Malayalam</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="kn" class="accent-sky-500">Kannada</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="ja" class="accent-sky-500">Japanese</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="es" class="accent-sky-500">Spanish</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="languages" data-profile-value="fr" class="accent-sky-500">French</label>
+                </div></fieldset>
+                <fieldset><legend class="mb-2 text-xs font-bold uppercase text-slate-500">Preferred Genres</legend><div class="grid gap-2">
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Action" class="accent-sky-500">Action</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Comedy" class="accent-sky-500">Comedy</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Drama" class="accent-sky-500">Drama</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Crime" class="accent-sky-500">Crime</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Thriller" class="accent-sky-500">Thriller</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Romance" class="accent-sky-500">Romance</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Sci-Fi" class="accent-sky-500">Sci-Fi</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Horror" class="accent-sky-500">Horror</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Animation" class="accent-sky-500">Animation</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Documentary" class="accent-sky-500">Documentary</label>
+                </div></fieldset>
             </div>
             <div class="mt-5 flex justify-end gap-2">
-                <button id="closeSubscriptionsBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Close</button>
-                <button id="saveSubscriptionsBtn" type="button" class="rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">Save</button>
+                <button id="closeProfileBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Close</button>
+                <button id="saveProfileBtn" type="button" class="rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">Save Preferences</button>
             </div>
         </div>
     </div>
