@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.12.1**
+**Current version: v2.13.0**
 
 ## 1. Project Vision
 
@@ -17,7 +17,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.12.1
+## 3. Completed Features Through v2.13.0
 
 ### Authentication and private libraries
 
@@ -63,6 +63,13 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Six-month Discover freshness applies to every movie/TV and `my_subs`/`my_langs` query: movies use a six-month India digital release window plus a twelve-month primary-release cutoff, and TV uses a six-month first-air-date window. Queries use India availability, flat-rate streaming, popularity/newest sorting, and at least 10 votes.
 - Discover tiles show India streaming platform badges. Provider results are normalized and cached on each candidate; `my_subs` prioritizes an available service from the user's subscriptions.
 
+### v2.13.0 mobile and discovery updates
+
+- The header wraps on narrow screens, keeps its action buttons on one line, and hides the profile name on extra-small screens while preserving the profile avatar trigger.
+- Discover removes already-saved titles before display.
+- Library Type, Platform, Genre, and Language filters and Discover Platform, Genre, and Language filters use compact checkbox dropdowns. Library selections survive Firestore snapshot refreshes; Discover supports multiple provider IDs, genres, and interleaved language queries.
+- Discover pagination adds a **Load More** control, fetches subsequent TMDB pages, and omits titles already saved or already shown.
+
 ### Other library features
 
 - Live search, type/platform/genre/language filters, sorting, one- and two-level collapsible grouping, watched status, metadata refresh, per-card selection, and confirmed batch deletion.
@@ -85,17 +92,15 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `renderCheckboxDropdown`, `updateCheckboxDropdownSummary`, `setMultiFilterValues`, `initMultiSelectFilters`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
 ## 5. Remaining Next Steps
 
 - Add **Because You Watched** personalized recommendations.
-- Configure and verify **Firestore Security Rules in the Firebase Console** so reads and writes are enforced by authenticated UID, in addition to client-side scoping.
 - Add an optional **Shared/Family Watchlist** toggle.
 - Add **JSON/CSV Export and Import** for backups and migration.
-- Deploy `worker.js`, configure the `TMDB_API_KEY` Worker secret, and set the deployed URL in `config.js`.
 
 These items form the remaining v3.0.0 roadmap.
 

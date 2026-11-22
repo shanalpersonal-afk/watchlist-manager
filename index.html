@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watchlist Studio v2.12.1</title>
+    <title>Watchlist Studio v2.13.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -40,19 +40,19 @@
 
     <!-- Main Dashboard -->
     <div id="appDashboard" class="hidden">
-        <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
+        <header class="flex flex-wrap items-center justify-between gap-2 mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.12.1</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.13.0</span></h1>
             </div>
-            <div class="flex items-center gap-3">
-                <button id="startTourBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
+            <div class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+                <button id="startTourBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
                 <button onclick="toggleTheme()" class="p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-sm hover:border-sky-400 transition-colors">☀️/🌙</button>
                 <div id="userProfileInfo" class="flex items-center gap-2">
                     <button id="openProfileBtn" type="button" title="Profile &amp; Preferences" aria-label="Profile &amp; Preferences" class="flex cursor-pointer items-center gap-2 rounded-full px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <img id="userAvatar" class="w-8 h-8 rounded-full border border-sky-400" src="" alt="User">
-                    <span id="userNameDisplay" class="text-xs font-semibold text-slate-700 dark:text-slate-300"></span>
+                    <span id="userNameDisplay" class="hidden sm:inline text-xs font-semibold text-slate-700 dark:text-slate-300"></span>
                     </button>
-                    <button id="signOutBtn" class="text-xs bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-200 dark:hover:bg-rose-900">Sign Out</button>
+                    <button id="signOutBtn" class="whitespace-nowrap text-xs bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-200 dark:hover:bg-rose-900">Sign Out</button>
                 </div>
             </div>
         </header>
@@ -78,19 +78,19 @@
                 <div id="filterDrawer" class="hidden grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
                     <div>
                         <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Type</label>
-                        <select id="filterType" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="All">All Types</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
+                        <div id="filterTypeOptions"></div>
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Platform</label>
-                        <select id="filterPlatform" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="All">All Platforms</option></select>
+                        <div id="filterPlatformOptions"></div>
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Genre</label>
-                        <select id="filterGenre" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="All">All Genres</option></select>
+                        <div id="filterGenreOptions"></div>
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Language</label>
-                        <select id="filterLanguage" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="All">All Languages</option></select>
+                        <div id="filterLanguageOptions"></div>
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Primary Group</label>
@@ -137,31 +137,29 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-end">
                             <div>
                                 <label for="trendingType" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Type</label>
-                                <select id="trendingType" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
+                                <select id="trendingType" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
                             </div>
                             <div>
-                                <label for="trendingGenre" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genre</label>
-                                <select id="trendingGenre" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="Action">Action</option><option value="Comedy">Comedy</option><option value="Drama">Drama</option><option value="Crime">Crime</option><option value="Thriller">Thriller</option><option value="Romance">Romance</option><option value="Sci-Fi">Sci-Fi</option><option value="Horror">Horror</option><option value="Animation">Animation</option><option value="Documentary">Documentary</option></select>
+                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genre</label><div id="trendingGenreOptions"></div>
                             </div>
                             <div>
-                                <label for="trendingLanguage" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Language</label>
-                                <select id="trendingLanguage" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="my_langs">✨ My Languages</option><option value="en">English</option><option value="hi">Hindi</option><option value="ko">Korean</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="ja">Japanese</option></select>
+                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Language</label><div id="trendingLanguageOptions"></div>
                             </div>
                             <div>
-                                <label for="trendingPlatform" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platform</label>
-                                <select id="trendingPlatform" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All Platforms</option><option value="my_subs">✨ My Subscriptions</option><option value="Netflix">Netflix</option><option value="Prime Video">Prime Video</option><option value="Disney+ Hotstar">Disney+ Hotstar</option><option value="JioCinema">JioCinema</option><option value="Zee5">Zee5</option><option value="SonyLIV">SonyLIV</option></select>
+                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platform</label><div id="trendingPlatformOptions"></div>
                             </div>
                             <div>
                                 <label for="trendingFreshness" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Freshness</label>
-                                <select id="trendingFreshness" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
+                                <select id="trendingFreshness" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
                             </div>
                             <div>
                                 <label for="trendingSort" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Sort</label>
-                                <select id="trendingSort" onchange="loadTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
+                                <select id="trendingSort" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
                             </div>
-                            <button id="loadTrendingBtn" type="button" onclick="loadTrendingDiscover()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600">Discover</button>
+                            <button id="loadTrendingBtn" type="button" onclick="resetTrendingDiscover()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600">Discover</button>
                         </div>
                         <div id="trendingShelf" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3" aria-live="polite"></div>
+                        <button id="loadMoreTrendingBtn" type="button" onclick="loadMoreTrending()" class="hidden mx-auto rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold hover:border-sky-400">Load More</button>
                     </div>
                 </details>
             </div>

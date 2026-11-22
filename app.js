@@ -84,6 +84,8 @@ let isManageMode = false;
 let onlyWatchableNow = false;
 let pendingWatchableActivation = false;
 let trendingLoadToken = 0;
+let trendingPage = 1;
+let displayedTrendingIds = new Set();
 const trendingCache = new Map();
 let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
@@ -141,9 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target.id === 'profileModal') closeProfileModal();
     });
     document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
-        if (event.currentTarget.open) loadTrendingDiscover();
+        if (event.currentTarget.open) resetTrendingDiscover();
     });
     initLibraryPreferences();
+    initMultiSelectFilters();
     updateWatchableNowButton();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
@@ -402,10 +405,12 @@ function getUserSubscriptions() {
 // Discover defaults: select saved services and languages for personalized India discovery.
 function applyProfileDefaultsToDiscover() {
     const profile = currentUser && userProfileUid === currentUser.uid ? userProfile : normalizeUserProfile(null);
-    const platformSelect = document.getElementById('trendingPlatform');
-    const languageSelect = document.getElementById('trendingLanguage');
-    if (platformSelect) platformSelect.value = profile.subscriptions.length ? 'my_subs' : 'All';
-    if (languageSelect) languageSelect.value = profile.languages.length ? 'my_langs' : 'All';
+    if (document.getElementById('trendingPlatformOptions')) {
+        setMultiFilterValues('trending', 'platform', profile.subscriptions.length ? ['my_subs'] : []);
+    }
+    if (document.getElementById('trendingLanguageOptions')) {
+        setMultiFilterValues('trending', 'language', profile.languages.length ? ['my_langs'] : []);
+    }
 }
 
 // Profile sync: load this user's local preferences first, then merge Firestore data when available.
@@ -488,7 +493,7 @@ async function saveUserProfile() {
     applyProfileDefaultsToDiscover();
     updateWatchableNowButton();
     renderWatchlist();
-    if (document.getElementById('trendingPanel')?.open) loadTrendingDiscover();
+    if (document.getElementById('trendingPanel')?.open) resetTrendingDiscover();
     try {
         if (db) await db.collection('users').doc(uid).set(userProfile, { merge: true });
     } catch (error) {
@@ -629,43 +634,127 @@ function getPlatformBadgeClass(platform) {
     return 'bg-slate-700';
 }
 
+// Filter dropdowns: read checked values for a Library or Discover checkbox group.
+function getMultiFilterValues(scope, name) {
+    return [...document.querySelectorAll(`[data-multi-scope="${scope}"][data-multi-name="${name}"]:checked`)]
+        .map(input => input.value);
+}
+
+// Filter dropdowns: update the compact summary and preserve requested selections.
+function renderCheckboxDropdown(containerId, scope, name, options, selectedValues = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const selected = new Set(selectedValues);
+    const normalizedOptions = [...options];
+    selectedValues.forEach(value => {
+        if (!normalizedOptions.some(option => option.value === value)) normalizedOptions.push({ value, label: value });
+    });
+
+    const details = document.createElement('details');
+    details.className = 'relative';
+    const summary = document.createElement('summary');
+    summary.className = 'flex cursor-pointer list-none items-center justify-between rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2 py-2 text-xs';
+    const summaryText = document.createElement('span');
+    summaryText.dataset.multiSummary = `${scope}:${name}`;
+    summary.appendChild(summaryText);
+    const caret = document.createElement('span');
+    caret.textContent = '▾';
+    caret.className = 'ml-2 text-slate-500';
+    summary.appendChild(caret);
+    details.appendChild(summary);
+
+    const panel = document.createElement('div');
+    panel.className = 'absolute left-0 top-full z-30 mt-1 max-h-56 min-w-full overflow-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 shadow-xl';
+    normalizedOptions.forEach(option => {
+        const label = document.createElement('label');
+        label.className = 'flex cursor-pointer items-center gap-2 whitespace-nowrap rounded px-1.5 py-1 text-xs hover:bg-slate-100 dark:hover:bg-slate-800';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = option.value;
+        input.checked = selected.has(option.value);
+        input.dataset.multiScope = scope;
+        input.dataset.multiName = name;
+        input.className = 'accent-sky-500';
+        input.addEventListener('change', () => {
+            updateCheckboxDropdownSummary(details);
+            if (scope === 'library') renderWatchlist();
+            else resetTrendingDiscover();
+        });
+        label.append(input, document.createTextNode(option.label));
+        panel.appendChild(label);
+    });
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.textContent = 'Clear';
+    clear.className = 'mt-1 w-full border-t border-slate-200 dark:border-slate-700 pt-2 text-left text-[10px] font-bold text-sky-600 hover:text-sky-500';
+    clear.addEventListener('click', event => {
+        event.preventDefault();
+        panel.querySelectorAll('input:checked').forEach(input => { input.checked = false; });
+        updateCheckboxDropdownSummary(details);
+        details.open = false;
+        if (scope === 'library') renderWatchlist();
+        else resetTrendingDiscover();
+    });
+    panel.appendChild(clear);
+    details.appendChild(panel);
+    container.replaceChildren(details);
+    updateCheckboxDropdownSummary(details);
+}
+
+// Filter dropdowns: display All for an empty selection or the number of checked options.
+function updateCheckboxDropdownSummary(details) {
+    const scopeName = details.querySelector('[data-multi-summary]')?.dataset.multiSummary;
+    const summary = details.querySelector('[data-multi-summary]');
+    const selectedCount = details.querySelectorAll('input[data-multi-scope]:checked').length;
+    if (summary) summary.textContent = selectedCount ? `${selectedCount} selected` : 'All';
+    if (scopeName) details.setAttribute('aria-label', `${scopeName.split(':')[1]} filter: ${selectedCount ? `${selectedCount} selected` : 'All'}`);
+}
+
+// Filter dropdowns: set selections after profile preferences are loaded.
+function setMultiFilterValues(scope, name, values) {
+    document.querySelectorAll(`[data-multi-scope="${scope}"][data-multi-name="${name}"]`).forEach(input => {
+        input.checked = values.includes(input.value);
+    });
+    const details = document.querySelector(`[data-multi-summary="${scope}:${name}"]`)?.closest('details');
+    if (details) updateCheckboxDropdownSummary(details);
+}
+
+// Filter dropdowns: build checkbox menus once and keep user selections during Firestore refreshes.
+function initMultiSelectFilters() {
+    renderCheckboxDropdown('trendingGenreOptions', 'trending', 'genre', [
+        'Action', 'Comedy', 'Drama', 'Crime', 'Thriller', 'Romance', 'Sci-Fi', 'Horror', 'Animation', 'Documentary'
+    ].map(value => ({ value, label: value })));
+    renderCheckboxDropdown('trendingLanguageOptions', 'trending', 'language', [
+        { value: 'my_langs', label: '✨ My Languages' },
+        ...Object.entries({ en: 'English', hi: 'Hindi', ko: 'Korean', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada', ja: 'Japanese', es: 'Spanish', fr: 'French' })
+            .map(([value, label]) => ({ value, label }))
+    ]);
+    renderCheckboxDropdown('trendingPlatformOptions', 'trending', 'platform', [
+        { value: 'my_subs', label: '✨ My Subscriptions' },
+        ...OTT_SERVICES.map(value => ({ value, label: value }))
+    ]);
+    populateFilterDropdowns();
+}
+
 function populateFilterDropdowns() {
     const items = getWatchlist();
-    
-    // Genres
-    const genreSelect = document.getElementById('filterGenre');
-    if (genreSelect) {
-        const selectedGenre = genreSelect.value;
-        const genres = [...new Set(items.map(i => i.genre).filter(Boolean))].sort();
-        genreSelect.innerHTML = '<option value="All">All Genres</option>';
-        genres.forEach(g => { genreSelect.innerHTML += `<option value="${g}">${g}</option>`; });
-        genreSelect.value = [...genreSelect.options].some(option => option.value === selectedGenre) ? selectedGenre : 'All';
-    }
-
-    // Languages (Populates dynamically!)
-    const langSelect = document.getElementById('filterLanguage');
-    if (langSelect) {
-        const selectedLanguage = langSelect.value;
-        const languages = [...new Set(items.map(getItemLanguage))].sort((a, b) => {
-            if (a === 'Unknown Language') return 1;
-            if (b === 'Unknown Language') return -1;
-            return a.localeCompare(b);
-        });
-        langSelect.innerHTML = '<option value="All">All Languages</option>';
-        languages.forEach(l => { langSelect.innerHTML += `<option value="${l}">${l}</option>`; });
-        langSelect.value = [...langSelect.options].some(option => option.value === selectedLanguage) ? selectedLanguage : 'All';
-    }
-
-    // Platforms
-    const platformSelect = document.getElementById('filterPlatform');
-    if (platformSelect) {
-        const selectedPlatform = platformSelect.value;
-        const allPlatforms = items.flatMap(i => i.platforms || [i.platform]).filter(Boolean);
-        const uniquePlatforms = [...new Set(allPlatforms.map(normalizePlatformName))].sort();
-        platformSelect.innerHTML = '<option value="All">All Platforms</option>';
-        uniquePlatforms.forEach(p => { platformSelect.innerHTML += `<option value="${p}">${p}</option>`; });
-        platformSelect.value = [...platformSelect.options].some(option => option.value === selectedPlatform) ? selectedPlatform : 'All';
-    }
+    const genres = [...new Set(items.map(item => item.genre).filter(Boolean))].sort();
+    const languages = [...new Set(items.map(getItemLanguage))].sort((a, b) => {
+        if (a === 'Unknown Language') return 1;
+        if (b === 'Unknown Language') return -1;
+        return a.localeCompare(b);
+    });
+    const platforms = [...new Set(items.flatMap(item => item.platforms || [item.platform]).filter(Boolean).map(normalizePlatformName))].sort();
+    const selectedTypes = getMultiFilterValues('library', 'type');
+    const selectedGenres = getMultiFilterValues('library', 'genre');
+    const selectedLanguages = getMultiFilterValues('library', 'language');
+    const selectedPlatforms = getMultiFilterValues('library', 'platform');
+    renderCheckboxDropdown('filterTypeOptions', 'library', 'type', [
+        { value: 'movie', label: 'Movies' }, { value: 'tv', label: 'TV Shows' }
+    ], selectedTypes);
+    renderCheckboxDropdown('filterGenreOptions', 'library', 'genre', genres.map(value => ({ value, label: value })), selectedGenres);
+    renderCheckboxDropdown('filterLanguageOptions', 'library', 'language', languages.map(value => ({ value, label: value })), selectedLanguages);
+    renderCheckboxDropdown('filterPlatformOptions', 'library', 'platform', platforms.map(value => ({ value, label: value })), selectedPlatforms);
 }
 
 // ==========================================
@@ -980,44 +1069,70 @@ function formatTrendingDate(date) {
     return `${year}-${month}-${day}`;
 }
 
+// Discover pagination: restart results and identifiers after any filter changes.
+function resetTrendingDiscover() {
+    trendingPage = 1;
+    displayedTrendingIds.clear();
+    document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
+    loadTrendingDiscover();
+}
+
+// Discover pagination: request the next TMDB page and append fresh titles.
+function loadMoreTrending() {
+    trendingPage += 1;
+    loadTrendingDiscover();
+}
+
 async function loadTrendingDiscover() {
     const shelf = document.getElementById('trendingShelf');
     const button = document.getElementById('loadTrendingBtn');
+    const loadMoreButton = document.getElementById('loadMoreTrendingBtn');
     if (!shelf) return;
 
     const type = document.getElementById('trendingType')?.value || 'All';
-    const genre = document.getElementById('trendingGenre')?.value || 'All';
-    const language = document.getElementById('trendingLanguage')?.value || 'All';
-    const platform = document.getElementById('trendingPlatform')?.value || 'All';
+    const selectedGenres = getMultiFilterValues('trending', 'genre');
+    const selectedLanguages = getMultiFilterValues('trending', 'language');
+    const selectedPlatforms = getMultiFilterValues('trending', 'platform');
     const freshness = document.getElementById('trendingFreshness')?.value || '6m';
     const sort = document.getElementById('trendingSort')?.value || 'popularity';
     const profile = currentUser && userProfileUid === currentUser.uid ? userProfile : normalizeUserProfile(null);
+    const page = trendingPage;
+    const append = page > 1;
     const profileCacheKey = `${profile.subscriptions.join(',')}|${profile.languages.join(',')}`;
-    const cacheKey = `${type}|${genre}|${language}|${platform}|${freshness}|${sort}|${profileCacheKey}`;
+    const cacheKey = `${type}|${selectedGenres.slice().sort().join(',')}|${selectedLanguages.slice().sort().join(',')}|${selectedPlatforms.slice().sort().join(',')}|${freshness}|${sort}|${profileCacheKey}|${page}`;
     const requestToken = ++trendingLoadToken;
 
     if (trendingCache.has(cacheKey)) {
         if (button) button.disabled = false;
-        renderTrendingShelf(trendingCache.get(cacheKey));
+        if (loadMoreButton) loadMoreButton.disabled = false;
+        const cachedCandidates = trendingCache.get(cacheKey).filter(candidate =>
+            !isAlreadyInWatchlist(candidate) && (!append || !displayedTrendingIds.has(String(candidate.id)))
+        );
+        renderTrendingShelf(cachedCandidates, append);
         return;
     }
 
     if (button) button.disabled = true;
-    shelf.textContent = 'Loading titles available in India...';
+    if (loadMoreButton) loadMoreButton.disabled = true;
+    if (!append) {
+        shelf.replaceChildren();
+        shelf.textContent = 'Loading titles available in India...';
+    }
     try {
-        let providerIds = null;
-        if (platform !== 'All') {
+        const wantsMySubs = selectedPlatforms.includes('my_subs');
+        const platformNames = [...new Set([
+            ...selectedPlatforms.filter(value => value !== 'my_subs'),
+            ...(wantsMySubs ? profile.subscriptions : [])
+        ])];
+        let providerIds = '';
+        if (platformNames.length > 0) {
             const providerMap = await fetchIndiaWatchProviderMap();
-            if (platform === 'my_subs') {
-                providerIds = [...new Set(profile.subscriptions.flatMap(service =>
-                    (providerMap.get(normalizePlatformName(service)) || '').split('|').filter(Boolean)
-                ))].join('|');
-            } else {
-                providerIds = providerMap.get(normalizePlatformName(platform));
-            }
+            providerIds = [...new Set(platformNames.flatMap(service =>
+                (providerMap.get(normalizePlatformName(service)) || '').split('|').filter(Boolean)
+            ))].join('|');
             if (!providerIds) {
                 trendingCache.set(cacheKey, []);
-                if (requestToken === trendingLoadToken) renderTrendingShelf([]);
+                if (requestToken === trendingLoadToken) renderTrendingShelf([], append);
                 return;
             }
         }
@@ -1034,13 +1149,11 @@ async function loadTrendingDiscover() {
         twelveMonthsAgo.setDate(Math.min(todayDate.getDate(), lastDayOfTwelveMonthStart));
         const twelveMonthStartDate = formatTrendingDate(twelveMonthsAgo);
 
-        const languages = language === 'my_langs' ? profile.languages : [language];
-        if (languages.length === 0) {
-            trendingCache.set(cacheKey, []);
-            if (requestToken === trendingLoadToken) renderTrendingShelf([]);
-            return;
-        }
-
+        const languages = [...new Set([
+            ...selectedLanguages.filter(value => value !== 'my_langs'),
+            ...(selectedLanguages.includes('my_langs') ? profile.languages : [])
+        ])];
+        if (languages.length === 0) languages.push('All');
         const queryJobs = mediaTypes.flatMap(mediaType => languages.map(languageCode => ({ mediaType, languageCode })));
         const resultSets = await Promise.all(queryJobs.map(async ({ mediaType, languageCode }) => {
             const params = new URLSearchParams({
@@ -1051,10 +1164,14 @@ async function loadTrendingDiscover() {
                     ? (mediaType === 'movie' ? 'primary_release_date.desc' : 'first_air_date.desc')
                     : 'popularity.desc'
             });
-            if (platform !== 'All') params.set('with_watch_providers', providerIds);
+            params.set('page', String(page));
+            if (providerIds) params.set('with_watch_providers', providerIds);
 
-            const genreId = genre !== 'All' ? TRENDING_GENRE_IDS[genre]?.[mediaType] : null;
-            if (genreId) params.set('with_genres', String(genreId));
+            const genreIds = [...new Set(selectedGenres.flatMap(genreName => {
+                const genreId = TRENDING_GENRE_IDS[genreName]?.[mediaType];
+                return genreId ? [String(genreId)] : [];
+            }))];
+            if (genreIds.length) params.set('with_genres', genreIds.join('|'));
             if (languageCode !== 'All') params.set('with_original_language', languageCode);
 
             if (freshness === '6m') {
@@ -1080,13 +1197,13 @@ async function loadTrendingDiscover() {
             ? (Date.parse(b.sortDate) || 0) - (Date.parse(a.sortDate) || 0)
             : b.popularity - a.popularity);
         let candidates;
-        if (language === 'my_langs') {
+        if (languages.length > 1) {
             const byLanguage = new Map();
             resultSets.forEach(({ languageCode, candidates: results }) => {
                 if (!byLanguage.has(languageCode)) byLanguage.set(languageCode, []);
                 byLanguage.get(languageCode).push(...results);
             });
-            const languageQueues = [...byLanguage.values()].map(sortCandidates);
+            const languageQueues = [...byLanguage.values()].map(queue => queue.sort((a, b) => b.popularity - a.popularity));
             candidates = [];
             const seenIds = new Set();
             while (candidates.length < 12 && languageQueues.some(queue => queue.length)) {
@@ -1094,7 +1211,7 @@ async function loadTrendingDiscover() {
                     while (queue.length && candidates.length < 12) {
                         const candidate = queue.shift();
                         const id = String(candidate.id);
-                        if (seenIds.has(id)) continue;
+                        if (seenIds.has(id) || displayedTrendingIds.has(id) || isAlreadyInWatchlist(candidate)) continue;
                         seenIds.add(id);
                         candidates.push(candidate);
                         break;
@@ -1104,13 +1221,13 @@ async function loadTrendingDiscover() {
         } else {
             candidates = sortCandidates(resultSets.flatMap(resultSet => resultSet.candidates));
             candidates = [...new Map(candidates.map(candidate => [String(candidate.id), candidate])).values()];
-            candidates = candidates.slice(0, 12);
+            candidates = candidates.filter(candidate => !displayedTrendingIds.has(String(candidate.id)) && !isAlreadyInWatchlist(candidate)).slice(0, 12);
         }
 
-        if (platform !== 'All' && platform !== 'my_subs') {
+        if (platformNames.length === 1 && !wantsMySubs) {
             candidates.forEach(candidate => {
-                candidate.platform = platform;
-                candidate.platforms = [platform];
+                candidate.platform = platformNames[0];
+                candidate.platforms = [platformNames[0]];
             });
         } else {
             await Promise.all(candidates.map(async candidate => {
@@ -1119,33 +1236,44 @@ async function loadTrendingDiscover() {
                     candidate.platforms = await candidate._indiaPlatformsPromise;
                 }
                 const normalizedAvailable = candidate.platforms.map(normalizePlatformName);
-                const preferredPlatform = platform === 'my_subs'
+                const preferredPlatform = wantsMySubs
                     ? profile.subscriptions.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)))
-                    : null;
+                    : platformNames.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)));
                 candidate.platform = preferredPlatform
                     ? normalizePlatformName(preferredPlatform)
                     : (normalizedAvailable[0] || 'Not Streaming in IN');
             }));
         }
         trendingCache.set(cacheKey, candidates);
-        if (requestToken === trendingLoadToken) renderTrendingShelf(candidates);
+        if (requestToken === trendingLoadToken) renderTrendingShelf(candidates, append);
     } catch (error) {
-        if (requestToken === trendingLoadToken) shelf.textContent = `Could not load India discovery: ${error.message}`;
+        if (requestToken === trendingLoadToken) {
+            if (!append) shelf.textContent = `Could not load India discovery: ${error.message}`;
+            else console.warn('Could not load more India discovery results.', error);
+        }
     } finally {
         if (requestToken === trendingLoadToken && button) button.disabled = false;
+        if (requestToken === trendingLoadToken && loadMoreButton) loadMoreButton.disabled = false;
     }
 }
 
-function renderTrendingShelf(candidates) {
+function renderTrendingShelf(candidates, append = false) {
     const shelf = document.getElementById('trendingShelf');
+    const loadMoreButton = document.getElementById('loadMoreTrendingBtn');
     if (!shelf) return;
-    shelf.replaceChildren();
+    if (!append) {
+        shelf.replaceChildren();
+        displayedTrendingIds.clear();
+    }
     if (candidates.length === 0) {
-        shelf.textContent = 'No titles found for these filters.';
+        if (!shelf.children.length) shelf.textContent = 'No new titles found for these filters.';
+        if (loadMoreButton) loadMoreButton.classList.add('hidden');
         return;
     }
+    if (shelf.textContent === 'Loading titles available in India...') shelf.replaceChildren();
 
     candidates.forEach(candidate => {
+        displayedTrendingIds.add(String(candidate.id));
         const card = document.createElement('article');
         card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
         const posterFrame = document.createElement('div');
@@ -1201,6 +1329,7 @@ function renderTrendingShelf(candidates) {
         card.appendChild(body);
         shelf.appendChild(card);
     });
+    if (loadMoreButton) loadMoreButton.classList.remove('hidden');
 }
 
 function updateBulkStatus() {
@@ -1274,10 +1403,10 @@ function renderWatchlist() {
     if (!container) return;
 
     const searchQuery = document.getElementById('searchQuery')?.value.toLowerCase().trim() || '';
-    const filterType = document.getElementById('filterType')?.value || 'All';
-    const filterPlatform = document.getElementById('filterPlatform')?.value || 'All';
-    const filterGenre = document.getElementById('filterGenre')?.value || 'All';
-    const filterLanguage = document.getElementById('filterLanguage')?.value || 'All';
+    const filterTypes = getMultiFilterValues('library', 'type');
+    const filterPlatforms = getMultiFilterValues('library', 'platform').map(normalizePlatformName);
+    const filterGenres = getMultiFilterValues('library', 'genre');
+    const filterLanguages = getMultiFilterValues('library', 'language');
     const sortBy = document.getElementById('sortBy')?.value || 'default';
     const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
     const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
@@ -1297,10 +1426,10 @@ function renderWatchlist() {
     let items = getWatchlist();
 
     if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
-    if (filterType !== 'All') items = items.filter(i => i.type === filterType);
-    if (filterPlatform !== 'All') items = items.filter(i => (i.platforms || [i.platform]).map(normalizePlatformName).includes(filterPlatform));
-    if (filterGenre !== 'All') items = items.filter(i => i.genre === filterGenre);
-    if (filterLanguage !== 'All') items = items.filter(i => getItemLanguage(i) === filterLanguage);
+    if (filterTypes.length) items = items.filter(item => filterTypes.includes(item.type));
+    if (filterPlatforms.length) items = items.filter(item => getItemPlatforms(item).map(normalizePlatformName).some(platform => filterPlatforms.includes(platform)));
+    if (filterGenres.length) items = items.filter(item => filterGenres.includes(item.genre));
+    if (filterLanguages.length) items = items.filter(item => filterLanguages.includes(getItemLanguage(item)));
     if (onlyWatchableNow) {
         const subscriptions = getUserSubscriptions();
         if (subscriptions.length === 0) {
