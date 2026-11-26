@@ -3,6 +3,7 @@
 // ==========================================
 // Recent release notes shown in the What's New sheet.
 const APP_UPDATES = [
+    { version: 'v2.19.0', date: '2026-11-27', title: 'AI Picks', items: ['Ask Gemini for movie and TV recommendations based on your taste, subscriptions, and optional mood.', 'AI titles are matched through TMDB so India OTT details and quick add actions remain available.'] },
     { version: 'v2.18.0', date: '2026-11-27', title: 'Taste based picks and free streaming', items: ['Find free and ad supported India streaming options for titles.', 'Get recommendations based on titles you have watched or loved.', 'Set your taste profile with a guided movie and show picker.'] },
     { version: 'v2.17.3', date: '2026-11-27', title: 'Discover and onboarding', items: ['Hide Discover recommendations and undo the action; reset hidden titles from your profile.', 'New users are guided through the app automatically.', 'See recent changes in the new What’s New sheet.'] },
     { version: 'v2.17.2', date: '2026-11-26', title: 'Discover controls', items: ['Improved recommendation controls and account preferences.'] },
@@ -255,6 +256,11 @@ document.addEventListener('DOMContentLoaded', () => {
         updateDiscoverFilterUI();
         showModal('discoverFilterSheet');
     });
+    document.getElementById('aiPicksChip')?.addEventListener('click', () => {
+        discoverMode = 'ai';
+        updateDiscoverFilterUI();
+    });
+    document.getElementById('askAiBtn')?.addEventListener('click', loadAIPicksRecommendations);
     ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('discoverFilterSheet')));
     document.getElementById('clearDiscoverFiltersBtn')?.addEventListener('click', () => applyDiscoverPreset('fresh'));
     document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
@@ -733,6 +739,7 @@ function updateDiscoverFilterUI() {
         button.classList.add(...(active ? activeClasses : inactiveClasses));
         button.setAttribute('aria-pressed', String(active));
     });
+    document.getElementById('aiMoodBar')?.classList.toggle('hidden', discoverMode !== 'ai');
 
     const labels = [];
     getMultiFilterValues('trending', 'platform').forEach(value => labels.push(value === 'my_subs' ? 'My OTTs' : value));
@@ -761,6 +768,83 @@ function initDiscoverPresets() {
             else applyDiscoverPreset(button.dataset.discoverPreset);
         });
     });
+}
+
+// Ask the Worker for AI ideas, then resolve each title through TMDB.
+async function loadAIPicksRecommendations() {
+    const shelf = document.getElementById('trendingShelf');
+    if (!shelf) return;
+    discoverMode = 'ai';
+    updateDiscoverFilterUI();
+    const requestToken = ++trendingLoadToken;
+    trendingPage = 1;
+    document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
+    renderTrendingSkeletons(shelf);
+
+    const orderedLiked = [
+        ...currentWatchlistItems.filter(item => item.watched),
+        ...currentWatchlistItems.filter(item => !item.watched),
+        ...(userProfile.tasteSeedMovies || [])
+    ];
+    const likedTitles = [...new Map(orderedLiked.map(item => {
+        const title = String(item.title || '').trim();
+        return [title.toLocaleLowerCase(), title];
+    }).filter(([key, title]) => key && title)).values()];
+    const excludeTitles = [...new Set(currentWatchlistItems.map(item => String(item.title || '').trim()).filter(Boolean))];
+
+    try {
+        const workerUrl = `${String(TMDB_PROXY_URL || '').replace(/\/+$/, '')}/ai/recommend`;
+        const response = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                likedTitles,
+                languages: userProfile.languages || [],
+                genres: userProfile.genres || [],
+                subscriptions: userProfile.subscriptions || [],
+                excludeTitles,
+                moodPrompt: document.getElementById('aiMoodInput')?.value.trim() || ''
+            })
+        });
+        if (!response.ok) throw new Error('AI request failed.');
+        const payload = await response.json();
+        const recommendations = Array.isArray(payload.recommendations) ? payload.recommendations : [];
+        if (!recommendations.length) throw new Error('AI returned no recommendations.');
+
+        const enrichedResults = await Promise.allSettled(recommendations.map(async recommendation => {
+            const matches = await searchTMDBCandidates(String(recommendation.title || ''));
+            const expectedType = recommendation.mediaType === 'tv' ? 'tv' : 'movie';
+            const sameType = matches.filter(match => match.mediaType === expectedType);
+            const desiredYear = String(recommendation.year || '');
+            const desiredYearNumber = Number(desiredYear);
+            const match = sameType.slice().sort((a, b) => {
+                const yearDistance = candidate => Number.isFinite(desiredYearNumber) && Number.isFinite(Number(candidate.year))
+                    ? Math.abs(Number(candidate.year) - desiredYearNumber)
+                    : Number.POSITIVE_INFINITY;
+                return yearDistance(a) - yearDistance(b) || (b.popularity || 0) - (a.popularity || 0);
+            })[0];
+            if (!match) return null;
+            return { ...match, aiReason: String(recommendation.reason || '').trim() };
+        }));
+        if (requestToken !== trendingLoadToken) return;
+        const candidates = [...new Map(enrichedResults.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []).map(candidate => [String(candidate.id), candidate])).values()]
+            .filter(candidate => !isAlreadyInWatchlist(candidate) && !userProfile.dismissedIds.includes(String(candidate.id)))
+            .slice(0, 10);
+        if (!candidates.length) throw new Error('AI titles could not be matched in TMDB.');
+        renderTrendingShelf(candidates);
+        document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
+        await Promise.all(candidates.map(async candidate => {
+            const providers = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+            candidate.platforms = providers.platforms;
+            candidate.freePlatforms = providers.freePlatforms;
+            candidate.platform = providers.platform;
+            if (requestToken === trendingLoadToken) updateTrendingPlatformBadge(candidate);
+        }));
+    } catch (error) {
+        if (requestToken !== trendingLoadToken) return;
+        showToast('AI Picks are unavailable right now. Showing your personalized picks instead.', 'info');
+        loadPersonalizedRecommendations();
+    }
 }
 
 function toggleManageMode() {
@@ -1989,6 +2073,7 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     const metadata = document.getElementById('detailPreviewMeta');
     const platforms = document.getElementById('detailPreviewPlatforms');
     const overview = document.getElementById('detailPreviewOverview');
+    const aiReason = document.getElementById('detailPreviewAIReason');
     const action = document.getElementById('detailPreviewActionBtn');
     const manageActions = document.getElementById('detailPreviewManageActions');
     document.getElementById('detailPreviewCandidateActions')?.classList.toggle('hidden', isSaved || !(item.id || item.tmdbId));
@@ -2003,6 +2088,8 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     title.textContent = item.title || 'Untitled';
     metadata.textContent = `${item.year || 'N/A'} · ${item.typeLabel || (item.mediaType === 'tv' || item.type === 'tv' ? '📺 TV Show' : '🎬 Movie')} · ⭐ ${item.rating || 'N/A'} · ${item.language || 'Unknown Language'}`;
     overview.textContent = item.overview || 'No synopsis is available for this title.';
+    aiReason?.classList.toggle('hidden', !item.aiReason);
+    if (aiReason) aiReason.textContent = item.aiReason ? `🤖 AI Pick: ${item.aiReason}` : '';
     const renderProviders = () => {
         const paid = item.platforms || [];
         const free = item.freePlatforms || [];

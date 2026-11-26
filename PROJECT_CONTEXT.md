@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.18.0**
+**Current version: v2.19.0**
 
 ## 1. Project Vision
 
@@ -18,17 +18,22 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.18.0
+## 3. Completed Features Through v2.19.0
+
+### v2.19.0 AI Curator
+
+- Added `POST /ai/recommend` to `worker.js`, which calls Gemini 3.8 Flash with the user's liked titles, languages, genres, subscriptions, exclusions, and optional mood.
+- Added the **🤖 AI Picks** chip and optional mood prompt to Discover. AI suggestions are matched through TMDB for poster, streaming, quick add, hide, and preview behavior; preview sheets include the AI pitch.
+- Current version is **v2.19.0**.
+- Remaining roadmap: **4-Friend Watch Circle** ratings and `watchedBy`, JSON/CSV Export & Import, and OMDb IMDb/RT scores.
+
+## Previous release notes
 
 ### v2.18.0 taste based discovery and free India OTTs
 
 - India provider lookups now include free and ad supported services. Free only titles show a green 🆓 badge, and title previews list subscription and free / ad supported services separately.
 - Added Spotify style `#tasteOnboardingModal` for language and genre preferences plus favorite title seeds. It follows the first walkthrough, appears once for existing users who have not completed it, and can be reset from Profile & OTTs.
 - **Because You Watched** recommendations use watched titles first, then titles to watch, then taste seeds. The For Me action falls back to profile based Discover when there are no seeds.
-- Current version is **v2.18.0**.
-- Remaining roadmap: **4-Friend Watch Circle** ratings and `watchedBy`, JSON/CSV Export & Import, and OMDb IMDb/RT scores.
-
-## Previous release notes
 
 ### v2.17.3 combined release
 
@@ -168,7 +173,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `renderPillFilterGroup`, `clearAllLibraryFilters`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`, `openDetailPreview`, `showToast`.
 - Taste onboarding: `openTasteOnboardingModal`, `resetTasteOnboarding`, `saveTasteOnboarding`, `completeTasteOnboarding`, `renderTasteTitleGrid`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
 - Release notes: `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`, `updateWhatsNewDot`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
