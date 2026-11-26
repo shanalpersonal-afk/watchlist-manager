@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.17.0</title>
+    <title>Watchlist Studio v2.17.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -17,9 +17,10 @@
         .badge-prime { background-color: #0284c7; }
         .badge-hotstar { background-color: #0d9488; }
         .badge-jiocinema { background-color: #ec4899; }
-        .quick-filter-pill, .option-chip { flex: 0 0 auto; border: 1px solid rgb(203 213 225); border-radius: 9999px; padding: .45rem .8rem; font-size: .75rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, color .15s, border-color .15s; }
+        .quick-filter-pill, .option-chip { flex: 0 0 auto; border: 1px solid rgb(203 213 225); border-radius: 9999px; padding: .375rem .625rem; font-size: .75rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, color .15s, border-color .15s; }
         .dark .quick-filter-pill, .dark .option-chip { border-color: rgb(51 65 85); }
         .quick-filter-pill.active, .option-chip.active { background: #0ea5e9; border-color: #0ea5e9; color: white; }
+        .discover-mode-chip { flex: 1 1 0; white-space: nowrap; }
     </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen p-4 md:p-8 max-w-7xl mx-auto transition-colors duration-200">
@@ -66,16 +67,18 @@
             </button>
         </header>
 
-        <div id="accountMenuModal" class="hidden fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/40 p-0 md:items-start md:justify-end md:bg-transparent md:p-4" role="dialog" aria-modal="true" aria-labelledby="accountMenuTitle">
+        <div id="accountMenuModal" data-modal-lock class="hidden fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/40 p-0 md:items-start md:justify-end md:bg-transparent md:p-4" role="dialog" aria-modal="true" aria-labelledby="accountMenuTitle">
             <button type="button" class="absolute inset-0 h-full w-full" aria-label="Close account menu" onclick="toggleAccountMenu(false)"></button>
-            <div class="relative z-10 w-full rounded-t-2xl bg-white p-4 shadow-2xl dark:bg-slate-900 md:mt-14 md:w-64 md:rounded-2xl md:border md:border-slate-200 md:p-3 md:dark:border-slate-800">
-                <h2 id="accountMenuTitle" class="sr-only">Account menu</h2>
-                <div class="mb-2 flex items-center justify-between md:hidden"><span class="text-sm font-bold">Account</span><button type="button" aria-label="Close account menu" onclick="toggleAccountMenu(false)" class="h-9 w-9 rounded-full">✕</button></div>
+            <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:mt-14 md:max-h-[85vh] md:w-72 md:max-w-lg md:rounded-2xl">
+                <div class="shrink-0 px-4 pt-2 md:pt-3"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="accountMenuTitle" class="text-base font-bold">Account</h2><button type="button" aria-label="Close account menu" onclick="toggleAccountMenu(false)" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+                <div class="min-h-0 flex-1 overflow-y-auto p-4">
                 <span id="userNameDisplay" class="hidden"></span>
                 <button id="openProfileBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Profile &amp; OTTs</button>
                 <button id="accountThemeBtn" type="button" onclick="toggleTheme()" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Dark / Light Mode</button>
                 <button id="startTourBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Take a Tour</button>
                 <button id="signOutBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950">Sign Out</button>
+                </div>
+                <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button type="button" onclick="toggleAccountMenu(false)" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white">Done</button></div>
             </div>
         </div>
 
@@ -98,14 +101,15 @@
                     <button id="clearLibrarySearchBtn" type="button" aria-label="Clear library search" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold hover:border-sky-400">✕</button>
                 </div>
 
-                <div id="filterDrawer" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="filterSheetTitle">
+                <div id="filterDrawer" data-modal-lock class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="filterSheetTitle">
                     <button type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close filters" onclick="toggleFilterDrawer()"></button>
-                    <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
-                        <div class="mb-4 flex items-center justify-between">
-                            <h2 id="filterSheetTitle" class="text-lg font-extrabold">Filter &amp; Sort</h2>
-                            <button type="button" aria-label="Close filters" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onclick="toggleFilterDrawer()">✕</button>
+                    <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+                        <div class="shrink-0 px-4 pt-2 md:pt-4">
+                            <div class="mb-2 h-1 w-10 rounded-full bg-slate-400/50 mx-auto md:hidden"></div>
+                            <div class="flex items-center justify-between"><h2 id="filterSheetTitle" class="text-base font-extrabold">Filter &amp; Sort</h2><button type="button" aria-label="Close filters" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onclick="toggleFilterDrawer()">✕</button></div>
                         </div>
-                        <div class="grid gap-5 sm:grid-cols-2">
+                        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+                        <div class="grid gap-4 sm:grid-cols-2">
                             <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Types</label><div id="filterTypeOptions"></div></div>
                             <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platforms</label><div id="filterPlatformOptions"></div></div>
                             <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genres</label><div id="filterGenreOptions"></div></div>
@@ -113,23 +117,24 @@
                             <div>
                                 <label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Group By</label>
                                 <input id="groupBySelect" type="hidden" value="none">
-                                <div id="groupByOptions" class="flex flex-wrap gap-2"></div>
+                                <div id="groupByOptions" class="flex flex-wrap gap-1.5"></div>
                             </div>
                             <div>
                                 <label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Sort By</label>
                                 <input id="sortBy" type="hidden" value="default">
-                                <div id="sortByOptions" class="flex flex-wrap gap-2"></div>
+                                <div id="sortByOptions" class="flex flex-wrap gap-1.5"></div>
                             </div>
                         </div>
-                        <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+                        <div class="mt-4 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
                             <button id="watchableNowBtn" type="button" onclick="toggleWatchableNow()" aria-pressed="false" class="rounded-full border border-emerald-300 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">✓ Watchable Now</button>
                             <button id="toggleManageBtn" type="button" onclick="toggleManageMode()" aria-pressed="false" class="rounded-full border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700">☑️ Manage / Batch Delete</button>
-                            <button id="openSharedListsBtn" type="button" class="rounded-full border border-sky-300 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-800 dark:text-sky-300">👥 Share / Join Lists</button>
                         </div>
-                        <label class="mt-4 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input id="tuckWatchedToggle" type="checkbox" checked onchange="saveGroupingPreferencesAndRender()" class="accent-sky-500">Tuck Watched at bottom</label>
-                        <div class="mt-5 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                            <button type="button" onclick="clearAllLibraryFilters()" class="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Clear All</button>
-                            <button type="button" onclick="toggleFilterDrawer()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white">Done</button>
+                        <label class="mt-3 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input id="tuckWatchedToggle" type="checkbox" checked onchange="saveGroupingPreferencesAndRender()" class="accent-sky-500">Tuck Watched at bottom</label>
+                        <button id="openSharedListsBtn" type="button" class="mt-3 text-left text-xs font-semibold text-sky-600 dark:text-sky-400">👥 Share / Join Lists</button>
+                        </div>
+                        <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+                            <button type="button" onclick="clearAllLibraryFilters()" class="mb-2 w-full text-xs font-semibold text-slate-500">Clear All Filters</button>
+                            <button type="button" onclick="toggleFilterDrawer()" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white">Done</button>
                         </div>
                     </div>
                 </div>
@@ -165,11 +170,12 @@
                 <details id="trendingPanel" open>
                     <summary class="cursor-pointer text-sm font-bold text-slate-800 dark:text-slate-100">🔥 Trending &amp; Discover in India</summary>
                     <div class="mt-4 space-y-4">
-                        <div id="discoverPresets" class="flex items-center gap-2">
-                            <button type="button" data-discover-preset="fresh" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">🔥 Trending</button>
-                            <button type="button" data-discover-preset="profile" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">✨ For Me</button>
-                            <button id="openTrendingFiltersBtn" type="button" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">🎛️ Filter</button>
+                        <div id="discoverPresets" class="flex items-center gap-1.5">
+                            <button type="button" data-discover-preset="fresh" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🔥 Trending</button>
+                            <button type="button" data-discover-preset="profile" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">✨ For Me</button>
+                            <button id="openTrendingFiltersBtn" type="button" data-discover-mode="custom" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🎛️ Filter</button>
                         </div>
+                        <div id="discoverActiveSummary" class="hidden flex min-w-0 items-center gap-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite"><span class="shrink-0">Active:</span><span id="discoverActiveSummaryText" class="min-w-0 flex-1 truncate"></span><button id="clearDiscoverFiltersBtn" type="button" class="shrink-0 font-semibold text-sky-600 underline underline-offset-2 dark:text-sky-400">Clear</button></div>
                         <select id="trendingType" class="hidden"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
                         <select id="trendingFreshness" class="hidden"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
                         <select id="trendingSort" class="hidden"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
@@ -181,52 +187,47 @@
             </div>
         </section>
 
-        <div id="trendingFiltersModal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="trendingFiltersTitle">
+        <div id="discoverFilterSheet" data-modal-lock class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="trendingFiltersTitle">
             <button id="closeTrendingFiltersBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close discovery filters"></button>
-            <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
-                <div class="mb-4 flex items-center justify-between"><h2 id="trendingFiltersTitle" class="text-lg font-extrabold">🎛️ Discover Filters</h2><button id="closeTrendingFiltersBtn" type="button" aria-label="Close discovery filters" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
-                <div class="grid gap-5 sm:grid-cols-2">
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Type</p><div id="trendingTypeOptions" class="flex flex-wrap gap-2"></div></div>
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Platform</p><div id="trendingPlatformOptions" class="flex flex-wrap gap-2"></div></div>
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Genre</p><div id="trendingGenreOptions" class="flex flex-wrap gap-2"></div></div>
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Language</p><div id="trendingLanguageOptions" class="flex flex-wrap gap-2"></div></div>
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Freshness</p><div id="trendingFreshnessOptions" class="flex flex-wrap gap-2"></div></div>
-                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Sort</p><div id="trendingSortOptions" class="flex flex-wrap gap-2"></div></div>
+            <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+                <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="trendingFiltersTitle" class="text-base font-extrabold">🎛️ Discover Filters</h2><button id="closeTrendingFiltersBtn" type="button" aria-label="Close discovery filters" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+                <div class="min-h-0 flex-1 overflow-y-auto p-4">
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Type</p><div id="trendingTypeOptions" class="flex flex-wrap gap-1.5"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Platform</p><div id="trendingPlatformOptions" class="flex flex-wrap gap-1.5"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Genre</p><div id="trendingGenreOptions" class="flex flex-wrap gap-1.5"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Language</p><div id="trendingLanguageOptions" class="flex flex-wrap gap-1.5"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Freshness</p><div id="trendingFreshnessOptions" class="flex flex-wrap gap-1.5"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Sort</p><div id="trendingSortOptions" class="flex flex-wrap gap-1.5"></div></div>
                 </div>
-                <div class="mt-5 flex justify-end"><button id="doneTrendingFiltersBtn" type="button" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white">Done</button></div>
+                </div>
+                <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button id="doneTrendingFiltersBtn" type="button" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white">Apply Filters</button></div>
             </div>
         </div>
 
-        <div id="bulkUploadModal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="bulkUploadTitle">
+        <div id="bulkUploadModal" data-modal-lock class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="bulkUploadTitle">
             <button id="closeBulkUploadBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close paste list"></button>
-            <div class="relative z-10 mt-auto max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
-                <div class="flex items-center justify-between gap-3">
-                    <h2 id="bulkUploadTitle" class="text-lg font-extrabold">📋 Paste List / Caption</h2>
-                    <button id="closeBulkUploadBtn" type="button" aria-label="Close paste list" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+            <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+                <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="bulkUploadTitle" class="text-base font-extrabold">📋 Paste List / Caption</h2><button id="closeBulkUploadBtn" type="button" aria-label="Close paste list" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
                 </div>
-                <div class="mt-3 space-y-3">
+                <div class="min-h-0 flex-1 overflow-y-auto p-4">
                     <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line, or paste a messy social media caption or list.</label>
                     <textarea id="bulkTitles" rows="5" placeholder="Inception&#10;The Matrix&#10;Sacred Games&#10;&#10;Or paste an Instagram, YouTube, WhatsApp, or Reddit caption..." class="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm"></textarea>
-                    <div class="flex flex-wrap gap-2">
-                        <button id="bulkUploadButton" type="button" onclick="bulkUploadItems()" class="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600">Upload Titles</button>
-                        <button id="extractTitlesBtn" type="button" onclick="handleExtractSocialTitles()" class="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 px-4 py-2 text-sm font-bold text-sky-700 dark:text-sky-300 hover:border-sky-500">✨ Extract Titles</button>
-                    </div>
                     <div id="bulkProgressContainer" class="hidden space-y-1" aria-live="polite">
                         <div class="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div id="bulkProgressBar" class="h-full w-0 bg-sky-500 transition-all duration-200"></div></div>
                         <p id="bulkStatusText" class="text-xs text-slate-500 dark:text-slate-400"></p>
                     </div>
                     <div id="bulkReviewContainer" class="hidden space-y-3" aria-live="polite"></div>
                 </div>
+                <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><div class="grid gap-2"><button id="bulkUploadButton" type="button" onclick="bulkUploadItems()" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600">Upload Titles</button><button id="extractTitlesBtn" type="button" onclick="handleExtractSocialTitles()" class="w-full py-2 text-xs font-semibold text-sky-700 dark:text-sky-300">✨ Extract Titles</button></div></div>
             </div>
         </div>
 
-        <div id="sharedListModal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListTitle">
-            <div class="my-auto w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
-                <div class="flex items-center justify-between gap-3">
-                    <h2 id="sharedListTitle" class="text-lg font-extrabold">👥 Shared Lists</h2>
-                    <button id="closeSharedListsBtn" type="button" aria-label="Close shared lists" class="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
-                </div>
-                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <div id="sharedListModal" data-modal-lock class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListTitle">
+            <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+                <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="sharedListTitle" class="text-base font-extrabold">👥 Shared Lists</h2><button id="closeSharedListsBtn" type="button" aria-label="Close shared lists" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+                <div class="min-h-0 flex-1 overflow-y-auto p-4">
+                <div class="grid gap-3 sm:grid-cols-2">
                     <form id="createSharedListForm" class="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 p-3">
                         <label for="newSharedListName" class="block text-xs font-bold">Create Shared List</label>
                         <input id="newSharedListName" type="text" maxlength="60" placeholder="Family watchlist" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm">
@@ -243,23 +244,23 @@
                     <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">My Shared Lists</h3>
                     <div id="sharedListsContainer" class="mt-2 space-y-2"></div>
                 </div>
+                </div>
+                <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button type="button" onclick="closeSharedListsModal()" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white">Done</button></div>
             </div>
         </div>
 
-        <div id="sharedListConfirmModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListConfirmTitle">
-            <div class="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
-                <h2 id="sharedListConfirmTitle" class="text-lg font-extrabold"></h2>
-                <p id="sharedListConfirmMessage" class="mt-2 text-sm text-slate-500 dark:text-slate-400"></p>
-                <div class="mt-5 flex justify-end gap-2">
-                    <button id="cancelSharedListActionBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Cancel</button>
-                    <button id="confirmSharedListActionBtn" type="button" class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white">Confirm</button>
-                </div>
+    <div id="sharedListConfirmModal" data-modal-lock class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListConfirmTitle">
+        <button type="button" class="absolute inset-0 h-full w-full" aria-label="Close confirmation" onclick="closeSharedListConfirmModal()"></button>
+        <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+            <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="sharedListConfirmTitle" class="text-base font-extrabold"></h2><button id="closeSharedListConfirmBtn" type="button" aria-label="Close confirmation" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4"><p id="sharedListConfirmMessage" class="text-sm text-slate-500 dark:text-slate-400"></p></div>
+            <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button id="confirmSharedListActionBtn" type="button" class="w-full rounded-xl bg-rose-600 py-3 font-bold text-white">Confirm</button><button id="cancelSharedListActionBtn" type="button" class="mt-1 w-full py-2 text-xs font-semibold text-slate-500">Cancel</button></div>
             </div>
-        </div>
+    </div>
 
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
-            <p class="mt-1">v2.17.0</p>
+            <p class="mt-1">v2.17.1</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
                 <summary class="cursor-pointer text-center">📱 How to Install as App</summary>
                 <ul class="mt-2 space-y-1">
@@ -276,12 +277,12 @@
         </nav>
     </div>
 
-    <div id="detailPreviewModal" class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="detailPreviewTitle">
+    <div id="detailPreviewModal" data-modal-lock class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="detailPreviewTitle">
         <button id="closeDetailPreviewBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close title preview"></button>
-        <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl md:my-auto md:max-w-lg md:rounded-2xl md:p-6">
-            <div class="md:hidden w-10 h-1 bg-slate-400/50 rounded-full mx-auto mb-3" aria-hidden="true"></div>
-            <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Title Preview</h2><button id="closeDetailPreviewBtn" type="button" aria-label="Close preview" class="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
-            <div class="mt-3 flex items-start gap-4">
+        <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+            <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 class="text-base font-bold">Title Preview</h2><button id="closeDetailPreviewBtn" type="button" aria-label="Close preview" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+            <div class="flex items-start gap-4">
                 <img id="detailPreviewPoster" alt="" class="hidden aspect-[2/3] w-24 shrink-0 rounded-xl object-cover sm:w-28">
                 <div id="detailPreviewPosterFallback" class="hidden aspect-[2/3] w-24 shrink-0 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 text-4xl sm:w-28">🎬</div>
                 <div class="min-w-0 flex-1">
@@ -291,20 +292,25 @@
                 </div>
             </div>
             <p id="detailPreviewOverview" class="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
-            <button id="detailPreviewActionBtn" type="button" class="mt-4 w-full rounded-lg bg-sky-500 py-3 text-sm font-bold text-white hover:bg-sky-600"></button>
+            </div>
+            <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+            <button id="detailPreviewActionBtn" type="button" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600"></button>
             <div id="detailPreviewManageActions" class="hidden mt-3 grid grid-cols-2 gap-2">
-                <button id="detailPreviewRefreshBtn" type="button" class="rounded-lg border border-slate-300 py-2 text-xs font-semibold dark:border-slate-700">↻ Refresh Metadata</button>
-                <button id="detailPreviewDeleteBtn" type="button" class="rounded-lg border border-rose-300 py-2 text-xs font-semibold text-rose-600 dark:border-rose-900 dark:text-rose-400">Delete</button>
+                <button id="detailPreviewRefreshBtn" type="button" class="min-h-11 rounded-lg border border-slate-300 text-xs font-semibold dark:border-slate-700">↻ Refresh Metadata</button>
+                <button id="detailPreviewDeleteBtn" type="button" class="min-h-11 rounded-lg border border-rose-300 text-xs font-semibold text-rose-600 dark:border-rose-900 dark:text-rose-400">Delete</button>
+            </div>
             </div>
         </div>
     </div>
     <div id="toastContainer" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite" aria-atomic="false"></div>
 
-    <div id="profileModal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
-        <div class="my-auto w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
-            <h2 id="profileTitle" class="text-lg font-extrabold">Profile &amp; Preferences</h2>
-            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose your streaming services, preferred languages, and genres.</p>
-            <div class="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+    <div id="profileModal" data-modal-lock class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+        <button type="button" class="absolute inset-0 h-full w-full" aria-label="Close profile preferences" onclick="closeProfileModal()"></button>
+        <div class="relative z-10 mt-auto flex max-h-[75vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-lg md:rounded-2xl">
+            <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="profileTitle" class="text-base font-extrabold">Profile &amp; OTTs</h2><button id="closeProfileBtn" type="button" aria-label="Close profile preferences" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+            <p class="text-xs text-slate-500 dark:text-slate-400">Choose your streaming services, preferred languages, and genres.</p>
+            <div class="mt-3 grid gap-4 text-sm sm:grid-cols-2">
                 <fieldset><legend class="mb-2 text-xs font-bold uppercase text-slate-500">My OTT Subscriptions</legend><div class="grid gap-2">
                     <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Netflix" class="accent-sky-500">Netflix</label>
                     <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="subscriptions" data-profile-value="Prime Video" class="accent-sky-500">Prime Video</label>
@@ -338,10 +344,8 @@
                     <label class="flex items-center gap-2"><input type="checkbox" data-profile-group="genres" data-profile-value="Documentary" class="accent-sky-500">Documentary</label>
                 </div></fieldset>
             </div>
-            <div class="mt-5 flex justify-end gap-2">
-                <button id="closeProfileBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Close</button>
-                <button id="saveProfileBtn" type="button" class="rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">Save Preferences</button>
             </div>
+            <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button id="saveProfileBtn" type="button" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600">Save Preferences</button></div>
         </div>
     </div>
 

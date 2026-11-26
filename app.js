@@ -95,6 +95,8 @@ let pendingWatchableActivation = false;
 let trendingLoadToken = 0;
 let trendingPage = 1;
 let displayedTrendingIds = new Set();
+let discoverMode = 'trending';
+let modalLockObserver = null;
 const trendingCache = new Map();
 let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
@@ -121,8 +123,26 @@ const WATCHLIST_TOUR_STEPS = [
 // ==========================================
 // 2. Auth State & Lifecycle Event Listeners
 // ==========================================
+function syncModalBodyScroll() {
+    const anyModalOpen = [...document.querySelectorAll('[data-modal-lock]')].some(modal => !modal.classList.contains('hidden'));
+    document.body.classList.toggle('overflow-hidden', anyModalOpen);
+}
+
+function showModal(id) {
+    document.getElementById(id)?.classList.remove('hidden');
+    syncModalBodyScroll();
+}
+
+function hideModal(id) {
+    document.getElementById(id)?.classList.add('hidden');
+    syncModalBodyScroll();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    modalLockObserver = new MutationObserver(syncModalBodyScroll);
+    document.querySelectorAll('[data-modal-lock]').forEach(modal => modalLockObserver.observe(modal, { attributes: true, attributeFilter: ['class'] }));
+    syncModalBodyScroll();
     document.getElementById('accountMenuBtn')?.addEventListener('click', () => toggleAccountMenu());
     
     const googleBtn = document.getElementById('googleSignInBtn');
@@ -166,8 +186,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('openBulkUploadBtn')?.addEventListener('click', event => { event.preventDefault(); openBulkUploadModal(); });
     ['closeBulkUploadBtn', 'closeBulkUploadBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeBulkUploadModal));
-    document.getElementById('openTrendingFiltersBtn')?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.remove('hidden'));
-    ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.add('hidden')));
+    document.getElementById('openTrendingFiltersBtn')?.addEventListener('click', () => {
+        discoverMode = 'custom';
+        updateDiscoverFilterUI();
+        showModal('discoverFilterSheet');
+    });
+    ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('discoverFilterSheet')));
+    document.getElementById('clearDiscoverFiltersBtn')?.addEventListener('click', () => applyDiscoverPreset('fresh'));
     document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
     document.getElementById('openProfileBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openProfileModal(); });
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
@@ -177,20 +202,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('openSharedListsBtn')?.addEventListener('click', () => {
         document.getElementById('sharedListsStatus').textContent = '';
-        document.getElementById('sharedListModal')?.classList.remove('hidden');
+        showModal('sharedListModal');
     });
-    document.getElementById('closeSharedListsBtn')?.addEventListener('click', () => document.getElementById('sharedListModal')?.classList.add('hidden'));
+    document.getElementById('closeSharedListsBtn')?.addEventListener('click', closeSharedListsModal);
     document.getElementById('sharedListModal')?.addEventListener('click', event => {
-        if (event.target.id === 'sharedListModal') event.currentTarget.classList.add('hidden');
+        if (event.target.id === 'sharedListModal') closeSharedListsModal();
     });
     document.getElementById('cancelSharedListActionBtn')?.addEventListener('click', closeSharedListConfirmModal);
+    document.getElementById('closeSharedListConfirmBtn')?.addEventListener('click', closeSharedListConfirmModal);
     document.getElementById('confirmSharedListActionBtn')?.addEventListener('click', confirmLeaveOrDeleteSharedList);
     document.getElementById('activeListSelect')?.addEventListener('change', event => switchActiveList(event.target.value));
     document.getElementById('createSharedListBtn')?.addEventListener('click', createSharedList);
     document.getElementById('joinSharedListBtn')?.addEventListener('click', () => joinSharedList(document.getElementById('joinInviteCodeInput')?.value));
     document.getElementById('copySharedListCodeBtn')?.addEventListener('click', () => copyActiveSharedListValue('code'));
     document.getElementById('copySharedListLinkBtn')?.addEventListener('click', () => copyActiveSharedListValue('link'));
-    document.getElementById('mobileNavSharedBtn')?.addEventListener('click', () => document.getElementById('sharedListModal')?.classList.remove('hidden'));
+    document.getElementById('mobileNavSharedBtn')?.addEventListener('click', () => showModal('sharedListModal'));
     ['closeDetailPreviewBtn', 'closeDetailPreviewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeDetailPreview));
     document.getElementById('detailPreviewActionBtn')?.addEventListener('click', handleDetailPreviewAction);
     document.getElementById('detailPreviewRefreshBtn')?.addEventListener('click', async () => {
@@ -215,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncQuickFilterPills();
     updateWatchableNowButton();
     updateLibraryFilterIndicator();
+    updateDiscoverFilterUI();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
@@ -483,6 +510,7 @@ function renderSingleSelectPills(containerId, inputId, options, selectedValue, o
     const container = document.getElementById(containerId);
     const valueInput = document.getElementById(inputId);
     if (!container || !valueInput) return;
+    container.classList.add('flex', 'flex-wrap', 'gap-1.5');
     valueInput.value = selectedValue;
     container.replaceChildren();
     options.forEach(option => {
@@ -522,7 +550,8 @@ function toggleFilterDrawer() {
     const button = document.getElementById('toggleFilterDrawerBtn');
     if (!drawer) return;
     const isOpening = drawer.classList.contains('hidden');
-    drawer.classList.toggle('hidden', !isOpening);
+    if (isOpening) showModal('filterDrawer');
+    else hideModal('filterDrawer');
     if (button) button.setAttribute('aria-expanded', String(isOpening));
 }
 
@@ -530,7 +559,8 @@ function toggleAccountMenu(forceOpen) {
     const menu = document.getElementById('accountMenuModal');
     if (!menu) return;
     const open = typeof forceOpen === 'boolean' ? forceOpen : menu.classList.contains('hidden');
-    menu.classList.toggle('hidden', !open);
+    if (open) showModal('accountMenuModal');
+    else hideModal('accountMenuModal');
 }
 
 function updateLibraryFilterIndicator() {
@@ -555,13 +585,13 @@ function clearAllLibraryFilters() {
 
 // Open the paste-list dialog without navigating away from Add Titles.
 function openBulkUploadModal() {
-    document.getElementById('bulkUploadModal')?.classList.remove('hidden');
+    showModal('bulkUploadModal');
     document.getElementById('bulkTitles')?.focus();
 }
 
 // Close the paste-list dialog.
 function closeBulkUploadModal() {
-    document.getElementById('bulkUploadModal')?.classList.add('hidden');
+    hideModal('bulkUploadModal');
 }
 
 // Apply a one-tap Discover preset and refresh India results.
@@ -585,8 +615,46 @@ function applyDiscoverPreset(preset) {
     } else if (preset === 'comedy') {
         setMultiFilterValues('trending', 'genre', ['Comedy']);
     }
-    document.querySelectorAll('[data-discover-preset]').forEach(button => button.classList.toggle('active', button.dataset.discoverPreset === preset));
+    discoverMode = preset === 'profile' ? 'profile' : (preset === 'fresh' ? 'trending' : 'custom');
+    updateDiscoverFilterUI();
     resetTrendingDiscover();
+}
+
+function handleCustomDiscoverFilterChange() {
+    discoverMode = 'custom';
+    updateDiscoverFilterUI();
+    resetTrendingDiscover();
+}
+
+function updateDiscoverFilterUI() {
+    const activeClasses = ['bg-sky-500', 'text-white', 'font-bold', 'shadow-md'];
+    const inactiveClasses = ['bg-slate-200', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-300', 'font-semibold'];
+    const modeButtons = document.querySelectorAll('.discover-mode-chip');
+    modeButtons.forEach(button => {
+        const mode = button.dataset.discoverMode || (button.dataset.discoverPreset === 'fresh' ? 'trending' : button.dataset.discoverPreset);
+        const active = mode === discoverMode;
+        button.classList.remove(...activeClasses, ...inactiveClasses);
+        button.classList.add(...(active ? activeClasses : inactiveClasses));
+        button.setAttribute('aria-pressed', String(active));
+    });
+
+    const labels = [];
+    getMultiFilterValues('trending', 'platform').forEach(value => labels.push(value === 'my_subs' ? 'My OTTs' : value));
+    getMultiFilterValues('trending', 'language').forEach(value => labels.push(value === 'my_langs' ? 'My Languages' : (LANGUAGE_NAMES[value] || value)));
+    getMultiFilterValues('trending', 'genre').forEach(value => labels.push(value));
+    const type = document.getElementById('trendingType')?.value || 'All';
+    if (type !== 'All') labels.push(type === 'tv' ? 'TV' : 'Movies');
+    if (document.getElementById('trendingFreshness')?.value === 'all') labels.push('All Time');
+    if (document.getElementById('trendingSort')?.value === 'newest') labels.push('Newest');
+
+    const filterButton = document.getElementById('openTrendingFiltersBtn');
+    const count = discoverMode === 'custom' ? labels.length : 0;
+    if (filterButton) filterButton.textContent = `🎛️ Filter${count ? ` (${count})` : ''}`;
+    const summary = document.getElementById('discoverActiveSummary');
+    const summaryText = document.getElementById('discoverActiveSummaryText');
+    const showSummary = labels.length > 0 && (discoverMode === 'profile' || discoverMode === 'custom');
+    summary?.classList.toggle('hidden', !showSummary);
+    if (summaryText) summaryText.textContent = labels.join(' • ');
 }
 
 // Connect each Discover preset chip to its matching filter preset.
@@ -641,6 +709,8 @@ function applyProfileDefaultsToDiscover() {
     if (document.getElementById('trendingLanguageOptions')) {
         setMultiFilterValues('trending', 'language', profile.languages.length ? ['my_langs'] : []);
     }
+    discoverMode = profile.subscriptions.length || profile.languages.length ? 'profile' : 'trending';
+    updateDiscoverFilterUI();
 }
 
 // Profile sync: load this user's local preferences first, then merge Firestore data when available.
@@ -690,12 +760,12 @@ async function openProfileModal() {
     document.querySelectorAll('#profileModal [data-profile-group]').forEach(input => {
         input.checked = profile[input.dataset.profileGroup]?.includes(input.dataset.profileValue) || false;
     });
-    document.getElementById('profileModal')?.classList.remove('hidden');
+    showModal('profileModal');
 }
 
 // Profile modal: close the dialog and cancel any pending Watchable Now activation.
 function closeProfileModal() {
-    document.getElementById('profileModal')?.classList.add('hidden');
+    hideModal('profileModal');
     pendingWatchableActivation = false;
 }
 
@@ -715,7 +785,7 @@ async function saveUserProfile() {
         console.warn('Could not save profile preferences in local storage.', error);
     }
     const shouldEnableWatchableNow = pendingWatchableActivation;
-    document.getElementById('profileModal')?.classList.add('hidden');
+    hideModal('profileModal');
     trendingCache.clear();
     if (shouldEnableWatchableNow) onlyWatchableNow = userProfile.subscriptions.length > 0;
     else if (userProfile.subscriptions.length === 0) onlyWatchableNow = false;
@@ -894,7 +964,7 @@ function leaveOrDeleteSharedList(listId) {
         ? 'This removes the list and all its titles. This cannot be undone.'
         : 'You will no longer see this shared list. You can join again with its invite code.';
     document.getElementById('confirmSharedListActionBtn').textContent = isOwner ? 'Delete List' : 'Leave List';
-    document.getElementById('sharedListConfirmModal')?.classList.remove('hidden');
+    showModal('sharedListConfirmModal');
 }
 
 // Carry out the confirmed shared-list action using the existing membership rules.
@@ -929,7 +999,11 @@ async function confirmLeaveOrDeleteSharedList() {
 // Close the shared-list confirmation dialog without changing membership.
 function closeSharedListConfirmModal() {
     pendingSharedListActionId = null;
-    document.getElementById('sharedListConfirmModal')?.classList.add('hidden');
+    hideModal('sharedListConfirmModal');
+}
+
+function closeSharedListsModal() {
+    hideModal('sharedListModal');
 }
 
 // Switch the library and add destination to the selected list.
@@ -1158,6 +1232,7 @@ function getMultiFilterValues(scope, name) {
 function renderPillFilterGroup(containerId, scope, name, options, selectedValues = []) {
     const container = document.getElementById(containerId);
     if (!container) return;
+    container.classList.add('flex', 'flex-wrap', 'gap-1.5');
     const normalizedOptions = [...options];
     selectedValues.forEach(value => {
         if (!normalizedOptions.some(option => option.value === value)) normalizedOptions.push({ value, label: value });
@@ -1179,7 +1254,11 @@ function renderPillFilterGroup(containerId, scope, name, options, selectedValues
                 syncQuickFilterPills();
                 updateLibraryFilterIndicator();
                 renderWatchlist();
-            } else resetTrendingDiscover();
+            } else {
+                discoverMode = 'custom';
+                updateDiscoverFilterUI();
+                resetTrendingDiscover();
+            }
         });
         label.append(input, document.createTextNode(option.label));
         container.appendChild(label);
@@ -1285,7 +1364,7 @@ function setMultiFilterValues(scope, name, values) {
     if (scope === 'library') {
         syncQuickFilterPills();
         updateLibraryFilterIndicator();
-    }
+    } else updateDiscoverFilterUI();
 }
 
 // Build default library and discovery chips, then fill library choices from saved titles.
@@ -1304,13 +1383,13 @@ function initMultiSelectFilters() {
     ]);
     renderSingleSelectPills('trendingTypeOptions', 'trendingType', [
         { value: 'All', label: 'All' }, { value: 'movie', label: 'Movies' }, { value: 'tv', label: 'TV Shows' }
-    ], 'All', resetTrendingDiscover);
+    ], 'All', handleCustomDiscoverFilterChange);
     renderSingleSelectPills('trendingFreshnessOptions', 'trendingFreshness', [
         { value: '6m', label: '🔥 Fresh on OTT' }, { value: 'all', label: 'All Time' }
-    ], '6m', resetTrendingDiscover);
+    ], '6m', handleCustomDiscoverFilterChange);
     renderSingleSelectPills('trendingSortOptions', 'trendingSort', [
         { value: 'popularity', label: 'Trending' }, { value: 'newest', label: 'Newest' }
-    ], 'popularity', resetTrendingDiscover);
+    ], 'popularity', handleCustomDiscoverFilterChange);
     populateFilterDropdowns();
 }
 
@@ -1621,7 +1700,7 @@ async function saveCandidateToWatchlist(candidate, button = null) {
 // Open a quick preview with title details and the right add or watched action.
 async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     if (!item) return;
-    document.getElementById('detailPreviewModal')?.classList.remove('hidden');
+    showModal('detailPreviewModal');
     activePreviewItem = item;
     activePreviewSaved = isSaved;
     const poster = document.getElementById('detailPreviewPoster');
@@ -1661,7 +1740,7 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
 
 // Close the title preview sheet.
 function closeDetailPreview() {
-    document.getElementById('detailPreviewModal')?.classList.add('hidden');
+    hideModal('detailPreviewModal');
     activePreviewItem = null;
 }
 

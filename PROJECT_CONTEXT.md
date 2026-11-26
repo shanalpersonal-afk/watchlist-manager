@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.17.0**
+**Current version: v2.17.1**
 
 ## 1. Project Vision
 
@@ -18,7 +18,14 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.17.0
+## 3. Completed Features Through v2.17.1
+
+### v2.17.1 mobile modal ergonomics and Discover state
+
+- Standardized mobile sheets with a 75vh height cap, fixed headers and footers, an independently scrolling body, compact filter pills, and 44×44 px close targets. Background scrolling locks while a modal is open and restores after the final modal closes.
+- Discover mode chips now show a clear active state. Custom filters show their count and a one-line active summary with a Clear action that returns to Trending.
+- Current version is **v2.17.1**.
+- Remaining roadmap: **Because You Watched** picks, per-person `watchedBy`, and JSON/CSV Export & Import.
 
 ### v2.17.0 mobile-first minimalist redesign
 
@@ -29,23 +36,11 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Updated the guided tour to four steps: active list, Library filters, title search, and the avatar account menu.
 - New modal/helper: `#accountMenuModal` and `toggleAccountMenu()`.
 
-### Remaining roadmap
-
-- Add **Because You Watched** picks.
-- Track `watchedBy` per person.
-- Add JSON/CSV Export & Import.
-
 ### v2.16.3 mobile preview and faster Discover
 
 - Restyled `#detailPreviewModal` as a mobile bottom sheet with a compact poster and stacked synopsis/action, while retaining a centered desktop modal and backdrop dismissal.
 - Added six animated poster skeletons for Discover and a compact candidate search loading row.
 - Discover now renders posters immediately after `/discover` returns and fills OTT badges progressively as India provider lookups resolve.
-
-### Next roadmap steps
-
-- Add **Because You Watched** picks.
-- Track `watchedBy` per person.
-- Add JSON/CSV Export & Import.
 
 ### v2.16.1 Discover initialization fix
 
