@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.15.0**
+**Current version: v2.15.1**
 
 ## 1. Project Vision
 
@@ -18,7 +18,14 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.15.0
+## 3. Completed Features Through v2.15.1
+
+### v2.15.1 usability fixes
+
+- Prevented duplicate shared-list creation with an in-progress guard and button disable; shared-list snapshots rebuild a deduplicated list picker and list panel.
+- Added candidate-search and library-search clear controls. Closing the library search panel also clears its query.
+- Replaced primary/secondary grouping controls with `#groupBySelect` and `#tuckWatchedToggle`, saved as `watchlist_group_by` and `watchlist_tuck_watched`. Watched titles can stay grouped at the bottom, collapsed by default.
+- Added `#sharedListBanner` with the active list's invite code and copy-code/copy-link actions.
 
 ### v2.15.0 Shared/Family Watchlists — Iteration 1
 
@@ -101,6 +108,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - `index.html` — splash, dashboard views, controls, discovery panel, profile preferences modal, and script loading order.
 - `app.js` — auth/listener lifecycle, candidate and discovery workflows, rendering, local preferences, and Firestore mutations.
 - `style.css` — legacy stylesheet; not loaded or used by the current app.
+- v2.15.1 UI helper IDs: `#groupBySelect`, `#tuckWatchedToggle`, and `#sharedListBanner`.
 
 ### Key functions in `app.js`
 
@@ -114,8 +122,8 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 ## 5. Remaining Next Steps
 
+- Add **Because You Watched** picks.
 - **Shared/Family Watchlists Iteration 2:** Add a per-person `watchedBy` picker.
-- Add **Because You Watched** personalized recommendations.
 - Add **JSON/CSV Export and Import** for backups and migration.
 
 These items form the remaining v3.0.0 roadmap.

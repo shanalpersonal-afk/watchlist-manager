@@ -67,6 +67,7 @@ let unsubscribeWatchlist = null;
 let activeListId = 'personal';
 let userSharedLists = [];
 let unsubscribeSharedLists = null;
+let isCreatingList = false;
 let currentWatchlistItems = [];
 let currentUser = null;
 let userProfile = { subscriptions: [], languages: [], genres: [] };
@@ -108,7 +109,7 @@ const TRENDING_GENRE_IDS = {
 const WATCHLIST_TOUR_STEPS = [
     { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
     { selector: '#filterDrawer', title: 'Filter your library', description: 'Filter, sort, or group your saved titles. On a phone, the filter drawer opens for this step.' },
-    { selector: '#primaryGroupSelect', title: 'Group your titles', description: 'Choose a primary group to arrange your library into collapsible sections.' },
+    { selector: '#groupBySelect', title: 'Group your titles', description: 'Choose how to arrange titles into collapsible sections.' },
     { selector: '#navAddBtn', title: 'Add Titles', description: 'Open Add Titles to search TMDB and add a specific movie or show.' },
     { selector: '#candidateSearchInput', title: 'Smart Title Search', description: 'Search once and pick the correct movie or TV show from the best matches.' },
     { selector: '#bulkUploadToggle', title: 'Bulk Upload', description: 'Add several titles at once by entering one title per line.' }
@@ -133,6 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const tourSkipBtn = document.getElementById('tourSkipBtn');
     if (tourSkipBtn) tourSkipBtn.addEventListener('click', endWatchlistTour);
     document.getElementById('candidateSearchBtn')?.addEventListener('click', searchCandidateInput);
+    document.getElementById('clearCandidateSearchBtn')?.addEventListener('click', clearCandidateSearch);
+    document.getElementById('candidateSearchInput')?.addEventListener('input', event => {
+        if (!event.target.value) document.getElementById('candidateResults').innerHTML = '';
+    });
+    document.getElementById('clearLibrarySearchBtn')?.addEventListener('click', clearLibrarySearch);
     document.getElementById('candidateSearchInput')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -154,14 +160,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target.id === 'sharedListModal') event.currentTarget.classList.add('hidden');
     });
     document.getElementById('activeListSelect')?.addEventListener('change', event => switchActiveList(event.target.value));
-    document.getElementById('createSharedListForm')?.addEventListener('submit', event => {
-        event.preventDefault();
-        createSharedList();
-    });
-    document.getElementById('joinSharedListForm')?.addEventListener('submit', event => {
-        event.preventDefault();
-        joinSharedList(document.getElementById('joinInviteCodeInput')?.value);
-    });
+    document.getElementById('createSharedListBtn')?.addEventListener('click', createSharedList);
+    document.getElementById('joinSharedListBtn')?.addEventListener('click', () => joinSharedList(document.getElementById('joinInviteCodeInput')?.value));
+    document.getElementById('copySharedListCodeBtn')?.addEventListener('click', () => copyActiveSharedListValue('code'));
+    document.getElementById('copySharedListLinkBtn')?.addEventListener('click', () => copyActiveSharedListValue('link'));
     document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
         if (event.currentTarget.open) resetTrendingDiscover();
     });
@@ -261,7 +263,7 @@ function showWatchlistTourStep() {
     tourTarget.style.zIndex = '40';
 
     const filterDrawer = document.getElementById('filterDrawer');
-    if ((step.selector === '#filterDrawer' || tourTarget.id === 'primaryGroupSelect') && filterDrawer?.classList.contains('hidden')) {
+    if ((step.selector === '#filterDrawer' || tourTarget.id === 'groupBySelect') && filterDrawer?.classList.contains('hidden')) {
         tourOpenedFilterDrawer = true;
         filterDrawer.classList.remove('hidden');
         filterDrawer.classList.add('grid');
@@ -353,36 +355,40 @@ function switchView(viewName) {
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
 }
 
+// Load the saved grouping and watched-title display choices.
 function initLibraryPreferences() {
-    const primary = document.getElementById('primaryGroupSelect');
-    const secondary = document.getElementById('secondaryGroupSelect');
-    if (!primary || !secondary) return;
+    const groupBy = document.getElementById('groupBySelect');
+    const tuckWatched = document.getElementById('tuckWatchedToggle');
+    if (!groupBy || !tuckWatched) return;
 
-    let savedPrimary = 'status';
-    let savedSecondary = 'platform';
+    let savedGroupBy = 'platform';
+    let savedTuckWatched = true;
     try {
-        savedPrimary = localStorage.getItem('watchlist_primary_group') || savedPrimary;
-        savedSecondary = localStorage.getItem('watchlist_secondary_group') || savedSecondary;
+        savedGroupBy = localStorage.getItem('watchlist_group_by') || savedGroupBy;
+        const savedTuck = localStorage.getItem('watchlist_tuck_watched');
+        if (savedTuck !== null) savedTuckWatched = savedTuck === 'true';
     } catch (error) {
         console.warn('Could not load saved grouping preferences.', error);
     }
 
-    primary.value = [...primary.options].some(option => option.value === savedPrimary) ? savedPrimary : 'status';
-    secondary.value = [...secondary.options].some(option => option.value === savedSecondary) ? savedSecondary : 'platform';
+    groupBy.value = [...groupBy.options].some(option => option.value === savedGroupBy) ? savedGroupBy : 'platform';
+    tuckWatched.checked = savedTuckWatched;
 }
 
+// Save grouping choices before refreshing the library.
 function saveGroupingPreferencesAndRender() {
-    const primary = document.getElementById('primaryGroupSelect');
-    const secondary = document.getElementById('secondaryGroupSelect');
+    const groupBy = document.getElementById('groupBySelect');
+    const tuckWatched = document.getElementById('tuckWatchedToggle');
     try {
-        if (primary) localStorage.setItem('watchlist_primary_group', primary.value);
-        if (secondary) localStorage.setItem('watchlist_secondary_group', secondary.value);
+        if (groupBy) localStorage.setItem('watchlist_group_by', groupBy.value);
+        if (tuckWatched) localStorage.setItem('watchlist_tuck_watched', String(tuckWatched.checked));
     } catch (error) {
         console.warn('Could not save grouping preferences.', error);
     }
     renderWatchlist();
 }
 
+// Open search or clear its filter when the panel closes.
 function toggleSearchPanel() {
     const panel = document.getElementById('searchBarPanel');
     const button = document.getElementById('toggleSearchBtn');
@@ -391,6 +397,26 @@ function toggleSearchPanel() {
     panel.classList.toggle('hidden', !isOpening);
     if (button) button.setAttribute('aria-expanded', String(isOpening));
     if (isOpening) document.getElementById('searchQuery')?.focus();
+    else {
+        const searchInput = document.getElementById('searchQuery');
+        if (searchInput) searchInput.value = '';
+        renderWatchlist();
+    }
+}
+
+// Clear the title search and any candidate results.
+function clearCandidateSearch() {
+    const input = document.getElementById('candidateSearchInput');
+    const results = document.getElementById('candidateResults');
+    if (input) input.value = '';
+    if (results) results.innerHTML = '';
+}
+
+// Clear the library search filter.
+function clearLibrarySearch() {
+    const input = document.getElementById('searchQuery');
+    if (input) input.value = '';
+    renderWatchlist();
 }
 
 function toggleFilterDrawer() {
@@ -592,7 +618,13 @@ function loadSharedLists() {
     unsubscribeSharedLists = db.collection('lists')
         .where('members', 'array-contains', currentUser.uid)
         .onSnapshot(snapshot => {
-            userSharedLists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            userSharedLists = [];
+            const seenListIds = new Set();
+            snapshot.docs.forEach(doc => {
+                if (seenListIds.has(doc.id)) return;
+                seenListIds.add(doc.id);
+                userSharedLists.push({ id: doc.id, ...doc.data() });
+            });
             if (activeListId !== 'personal' && !userSharedLists.some(list => list.id === activeListId)) {
                 activeListId = 'personal';
                 setupFirebaseListener();
@@ -609,9 +641,10 @@ function loadSharedLists() {
 // Create a shared list with a short code that members can share.
 async function createSharedList() {
     const nameInput = document.getElementById('newSharedListName');
+    const createButton = document.getElementById('createSharedListBtn');
     const status = document.getElementById('sharedListsStatus');
     const name = nameInput?.value.trim();
-    if (!currentUser || !db) return;
+    if (isCreatingList || !currentUser || !db) return;
     if (!name) {
         if (status) status.textContent = 'Enter a name for your shared list.';
         return;
@@ -625,6 +658,8 @@ async function createSharedList() {
     } else {
         inviteCode = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
     }
+    isCreatingList = true;
+    if (createButton) createButton.disabled = true;
     try {
         const listRef = await db.collection('lists').add({
             name,
@@ -632,7 +667,9 @@ async function createSharedList() {
             inviteCode,
             members: [currentUser.uid]
         });
-        userSharedLists.push({ id: listRef.id, name, ownerId: currentUser.uid, inviteCode, members: [currentUser.uid] });
+        if (!userSharedLists.some(list => list.id === listRef.id)) {
+            userSharedLists.push({ id: listRef.id, name, ownerId: currentUser.uid, inviteCode, members: [currentUser.uid] });
+        }
         updateActiveListControls();
         renderSharedLists();
         nameInput.value = '';
@@ -641,6 +678,9 @@ async function createSharedList() {
     } catch (error) {
         console.error('Could not create shared list.', error);
         if (status) status.textContent = 'Could not create the list. Check your Firestore access rules.';
+    } finally {
+        isCreatingList = false;
+        if (createButton) createButton.disabled = false;
     }
 }
 
@@ -732,7 +772,25 @@ function updateActiveListControls() {
     const activeList = userSharedLists.find(list => list.id === activeListId);
     const badge = document.getElementById('addingTargetBadge');
     if (badge) badge.textContent = activeList ? `Adding to: 👨‍👩‍👧‍👦 ${activeList.name || 'Shared List'}` : 'Adding to: 👤 My Private List';
+    const banner = document.getElementById('sharedListBanner');
+    const bannerText = document.getElementById('sharedListBannerText');
+    if (banner) banner.classList.toggle('hidden', !activeList);
+    if (bannerText && activeList) bannerText.textContent = `👨‍👩‍👧‍👦 ${activeList.name || 'Shared List'} • Code: ${activeList.inviteCode || 'Unavailable'}`;
     document.getElementById('deleteAllBtn')?.classList.toggle('hidden', activeListId !== 'personal');
+}
+
+// Copy the active shared list's code or invite link.
+async function copyActiveSharedListValue(kind) {
+    const list = userSharedLists.find(item => item.id === activeListId);
+    if (!list) return;
+    const value = kind === 'link'
+        ? `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(list.inviteCode || '')}`
+        : list.inviteCode || '';
+    try {
+        await navigator.clipboard.writeText(value);
+    } catch (error) {
+        window.prompt(kind === 'link' ? 'Copy invite link:' : 'Copy invite code:', value);
+    }
 }
 
 // Show shared lists with invite codes and membership actions.
@@ -1645,6 +1703,7 @@ function renderBulkReviewContainer() {
     updateBulkStatus();
 }
 
+// Filter and render the active list using the saved grouping choices.
 function renderWatchlist() {
     const container = document.getElementById('watchlistDisplay');
     if (!container) return;
@@ -1655,8 +1714,8 @@ function renderWatchlist() {
     const filterGenres = getMultiFilterValues('library', 'genre');
     const filterLanguages = getMultiFilterValues('library', 'language');
     const sortBy = document.getElementById('sortBy')?.value || 'default';
-    const primaryGroup = document.getElementById('primaryGroupSelect')?.value || 'none';
-    const secondaryGroup = document.getElementById('secondaryGroupSelect')?.value || 'none';
+    const groupBy = document.getElementById('groupBySelect')?.value || 'platform';
+    const tuckWatched = document.getElementById('tuckWatchedToggle')?.checked ?? true;
 
     container.innerHTML = '';
     renderedDocIds = new Set();
@@ -1697,15 +1756,30 @@ function renderWatchlist() {
         return;
     }
 
-    const activeGroups = [...new Set([primaryGroup, secondaryGroup].filter(group => group !== 'none'))];
-    if (activeGroups.length === 0) {
-        renderGroupCards(container, items);
-    } else if (activeGroups.length === 1) {
-        renderGroupedCards(container, items, activeGroups[0]);
+    if (tuckWatched) {
+        const toWatch = items.filter(item => !item.watched);
+        const watched = items.filter(item => item.watched);
+        if (toWatch.length) renderWatchStatusSection(container, 'To Watch', toWatch, true, groupBy);
+        if (watched.length) renderWatchStatusSection(container, 'Watched', watched, false, groupBy);
     } else {
-        renderGroupedCards(container, items, primaryGroup, secondaryGroup);
+        if (groupBy === 'none') renderGroupCards(container, items);
+        else renderGroupedCards(container, items, groupBy);
     }
     updateBatchActionUI();
+}
+
+// Render a To Watch or Watched section, grouping its titles when requested.
+function renderWatchStatusSection(parentContainer, label, items, isOpen, groupBy) {
+    const section = document.createElement('details');
+    section.open = isOpen;
+    section.className = 'mb-4';
+    const heading = document.createElement('summary');
+    heading.className = 'cursor-pointer select-none font-bold text-slate-800 dark:text-slate-100 bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-4 py-2 mb-2';
+    heading.textContent = label;
+    section.appendChild(heading);
+    if (groupBy === 'none') renderGroupCards(section, items);
+    else renderGroupedCards(section, items, groupBy);
+    parentContainer.appendChild(section);
 }
 
 function renderGroupedCards(parentContainer, items, primaryGroup, secondaryGroup = null) {
