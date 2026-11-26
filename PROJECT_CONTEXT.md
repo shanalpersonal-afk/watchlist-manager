@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.16.3**
+**Current version: v2.17.0**
 
 ## 1. Project Vision
 
@@ -18,7 +18,22 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.16.3
+## 3. Completed Features Through v2.17.0
+
+### v2.17.0 mobile-first minimalist redesign
+
+- Replaced the crowded header with a single-line Watchlist header, centered desktop navigation, and one avatar button that opens the `#accountMenuModal` bottom sheet/popover for Profile & OTTs, theme, tour, and sign out.
+- Simplified the Library controls to one list/search/filter row, removed the quick-filter strip, and moved Watchable Now, grouping, sorting, filter pills, and Manage / Batch Delete into the filter sheet.
+- Redesigned Library cards around a 2:3 poster, compact OTT and rating badges, one-line title, and watched state; metadata refresh, delete, language, year, all OTTs, and synopsis now live in `#detailPreviewModal`.
+- Reduced Discover to Trending, For Me, and Filter chips with a responsive two-column mobile poster grid. The mobile bottom navigation remains in place.
+- Updated the guided tour to four steps: active list, Library filters, title search, and the avatar account menu.
+- New modal/helper: `#accountMenuModal` and `toggleAccountMenu()`.
+
+### Remaining roadmap
+
+- Add **Because You Watched** picks.
+- Track `watchedBy` per person.
+- Add JSON/CSV Export & Import.
 
 ### v2.16.3 mobile preview and faster Discover
 

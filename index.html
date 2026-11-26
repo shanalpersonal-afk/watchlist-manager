@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.16.3</title>
+    <title>Watchlist Studio v2.17.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -55,58 +55,42 @@
 
     <!-- Main Dashboard -->
     <div id="appDashboard" class="hidden pb-24 md:pb-8">
-        <header class="flex flex-wrap items-center justify-between gap-2 mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
-            <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.16.3</span></h1>
-            </div>
-            <div class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
-                <button id="startTourBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
-                <button onclick="toggleTheme()" class="p-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-sm hover:border-sky-400 transition-colors">☀️/🌙</button>
-                <div id="userProfileInfo" class="flex items-center gap-2">
-                    <button id="openProfileBtn" type="button" title="Profile &amp; Preferences" aria-label="Profile &amp; Preferences" class="flex cursor-pointer items-center gap-2 rounded-full px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <img id="userAvatar" class="w-8 h-8 rounded-full border border-sky-400" src="" alt="User">
-                    <span id="userNameDisplay" class="hidden sm:inline text-xs font-semibold text-slate-700 dark:text-slate-300"></span>
-                    </button>
-                    <button id="signOutBtn" class="whitespace-nowrap text-xs bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-200 dark:hover:bg-rose-900">Sign Out</button>
-                </div>
-            </div>
+        <header class="relative mb-4 flex h-14 items-center justify-between border-b border-slate-200 dark:border-slate-800">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">🍿 Watchlist</h1>
+            <nav class="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex" aria-label="Main navigation">
+                <button id="navLibraryBtn" type="button" onclick="switchView('library')" class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors">My Library</button>
+                <button id="navAddBtn" type="button" onclick="switchView('add')" class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors">Add Titles</button>
+            </nav>
+            <button id="accountMenuBtn" type="button" aria-label="Open account menu" aria-haspopup="dialog" class="h-9 w-9 overflow-hidden rounded-full border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+                <img id="userAvatar" class="h-full w-full object-cover" src="" alt="Account">
+            </button>
         </header>
 
-        <nav class="hidden md:flex gap-2 mb-6" aria-label="Main navigation">
-            <button id="navLibraryBtn" type="button" onclick="switchView('library')" class="rounded-lg border px-4 py-2 text-sm font-bold transition-colors">📚 My Library</button>
-            <button id="navAddBtn" type="button" onclick="switchView('add')" class="rounded-lg border px-4 py-2 text-sm font-bold transition-colors">➕ Add Titles</button>
-        </nav>
+        <div id="accountMenuModal" class="hidden fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/40 p-0 md:items-start md:justify-end md:bg-transparent md:p-4" role="dialog" aria-modal="true" aria-labelledby="accountMenuTitle">
+            <button type="button" class="absolute inset-0 h-full w-full" aria-label="Close account menu" onclick="toggleAccountMenu(false)"></button>
+            <div class="relative z-10 w-full rounded-t-2xl bg-white p-4 shadow-2xl dark:bg-slate-900 md:mt-14 md:w-64 md:rounded-2xl md:border md:border-slate-200 md:p-3 md:dark:border-slate-800">
+                <h2 id="accountMenuTitle" class="sr-only">Account menu</h2>
+                <div class="mb-2 flex items-center justify-between md:hidden"><span class="text-sm font-bold">Account</span><button type="button" aria-label="Close account menu" onclick="toggleAccountMenu(false)" class="h-9 w-9 rounded-full">✕</button></div>
+                <span id="userNameDisplay" class="hidden"></span>
+                <button id="openProfileBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Profile &amp; OTTs</button>
+                <button id="accountThemeBtn" type="button" onclick="toggleTheme()" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Dark / Light Mode</button>
+                <button id="startTourBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">Take a Tour</button>
+                <button id="signOutBtn" type="button" class="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950">Sign Out</button>
+            </div>
+        </div>
 
         <section id="libraryView" class="space-y-4">
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
-                <div class="mb-3 flex flex-wrap items-center gap-2">
+                <div class="flex items-center justify-between gap-2">
                     <label for="activeListSelect" class="sr-only">Active watchlist</label>
-                    <select id="activeListSelect" class="max-w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-xs font-semibold"></select>
-                    <button id="openSharedListsBtn" type="button" class="rounded-lg border border-sky-300 dark:border-sky-800 px-3 py-2 text-xs font-bold text-sky-700 dark:text-sky-300 hover:border-sky-500">👥 Share / Join</button>
+                    <select id="activeListSelect" class="min-w-0 flex-1 truncate rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm font-semibold"></select>
+                    <button id="toggleSearchBtn" type="button" onclick="toggleSearchPanel()" aria-label="Search library" title="Search" aria-expanded="false" class="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-lg">🔍</button>
+                    <button id="toggleFilterDrawerBtn" type="button" onclick="toggleFilterDrawer()" aria-label="Filter library" title="Filters" aria-expanded="false" class="relative h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-lg">🎛️<span id="libraryFilterDot" class="hidden absolute right-1 top-1 h-2 w-2 rounded-full bg-sky-500"></span></button>
                 </div>
-                <div id="sharedListBanner" class="hidden mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40 px-3 py-2">
-                    <p id="sharedListBannerText" class="text-xs font-semibold text-sky-800 dark:text-sky-200"></p>
-                    <div class="flex gap-2">
-                        <button id="copySharedListCodeBtn" type="button" class="rounded border border-sky-300 dark:border-sky-800 px-2 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">📋 Copy Code</button>
-                        <button id="copySharedListLinkBtn" type="button" class="rounded border border-sky-300 dark:border-sky-800 px-2 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">🔗 Copy Invite Link</button>
-                    </div>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button id="toggleSearchBtn" type="button" onclick="toggleSearchPanel()" aria-expanded="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">🔍 Search</button>
-                    <button id="toggleFilterDrawerBtn" type="button" onclick="toggleFilterDrawer()" aria-expanded="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">🎛️ Filters</button>
-                    <button id="toggleManageBtn" type="button" onclick="toggleManageMode()" aria-pressed="false" class="rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2 text-xs font-bold hover:border-sky-400">☑️ Manage</button>
-                    <button id="watchableNowBtn" type="button" onclick="toggleWatchableNow()" aria-pressed="false" class="rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:border-emerald-500">✓ Watchable Now</button>
-                </div>
-
-                <div id="libraryQuickFilters" class="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Quick filters">
-                    <button type="button" data-quick-scope="library" data-quick-name="type" data-quick-value="movie" class="quick-filter-pill">🎬 Movies</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="type" data-quick-value="tv" class="quick-filter-pill">📺 TV</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Netflix" class="quick-filter-pill">Netflix</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Prime Video" class="quick-filter-pill">Prime Video</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Disney+ Hotstar" class="quick-filter-pill">Disney+ Hotstar</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="Hindi" class="quick-filter-pill">Hindi</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="English" class="quick-filter-pill">English</button>
-                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="Korean" class="quick-filter-pill">Korean</button>
+                <div id="sharedListBanner" class="hidden mt-2 flex items-center gap-2 overflow-hidden rounded-lg bg-sky-50 px-2 py-1.5 dark:bg-sky-950/40">
+                    <p id="sharedListBannerText" class="min-w-0 flex-1 truncate text-xs font-semibold text-sky-800 dark:text-sky-200"></p>
+                    <button id="copySharedListCodeBtn" type="button" class="shrink-0 text-[10px] font-bold text-sky-700 dark:text-sky-300">Copy</button>
+                    <button id="copySharedListLinkBtn" type="button" class="shrink-0 text-[10px] font-bold text-sky-700 dark:text-sky-300">Link</button>
                 </div>
 
                 <div id="searchBarPanel" class="hidden mt-3 flex max-w-lg items-center gap-2">
@@ -137,6 +121,11 @@
                                 <div id="sortByOptions" class="flex flex-wrap gap-2"></div>
                             </div>
                         </div>
+                        <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+                            <button id="watchableNowBtn" type="button" onclick="toggleWatchableNow()" aria-pressed="false" class="rounded-full border border-emerald-300 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">✓ Watchable Now</button>
+                            <button id="toggleManageBtn" type="button" onclick="toggleManageMode()" aria-pressed="false" class="rounded-full border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700">☑️ Manage / Batch Delete</button>
+                            <button id="openSharedListsBtn" type="button" class="rounded-full border border-sky-300 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-800 dark:text-sky-300">👥 Share / Join Lists</button>
+                        </div>
                         <label class="mt-4 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input id="tuckWatchedToggle" type="checkbox" checked onchange="saveGroupingPreferencesAndRender()" class="accent-sky-500">Tuck Watched at bottom</label>
                         <div class="mt-5 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
                             <button type="button" onclick="clearAllLibraryFilters()" class="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Clear All</button>
@@ -160,17 +149,14 @@
         </section>
 
         <section id="addView" class="hidden space-y-4">
-            <div id="addingTargetBadge" class="inline-flex rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">Adding to: 👤 My Private List</div>
             <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-                <h2 class="mb-3 text-lg font-bold">Smart Title Search</h2>
-                <div class="flex flex-col gap-2 sm:flex-row">
+                <div class="flex flex-col gap-2">
                     <div class="relative min-w-0 flex-1">
-                        <input id="candidateSearchInput" type="text" placeholder="Search movies and TV shows..." class="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 pr-20 text-sm">
+                        <input id="candidateSearchInput" type="text" placeholder="Search movies and shows" class="min-h-[44px] w-full rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 pr-12 text-sm">
                         <span id="candidateSearchSpinner" class="hidden absolute right-10 top-1/2 -translate-y-1/2 animate-spin text-sky-500" aria-label="Searching">◌</span>
-                        <button id="clearCandidateSearchBtn" type="button" aria-label="Clear title search" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">✕</button>
+                        <button id="clearCandidateSearchBtn" type="button" aria-label="Clear title search" class="hidden absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">✕</button>
                     </div>
-                    <button id="candidateSearchBtn" type="button" class="rounded-lg bg-sky-500 px-5 py-2 text-sm font-bold text-white hover:bg-sky-600">Search</button>
-                    <button id="openBulkUploadBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-bold hover:border-sky-400">📋 Paste List / Caption</button>
+                    <a id="openBulkUploadBtn" href="#" class="self-start text-xs font-medium text-slate-500 underline decoration-slate-300 underline-offset-4 dark:text-slate-400">Have a list or Insta caption? Paste &amp; Import →</a>
                 </div>
                 <div id="candidateResults" class="mt-4 space-y-3" aria-live="polite"></div>
             </div>
@@ -179,21 +165,16 @@
                 <details id="trendingPanel" open>
                     <summary class="cursor-pointer text-sm font-bold text-slate-800 dark:text-slate-100">🔥 Trending &amp; Discover in India</summary>
                     <div class="mt-4 space-y-4">
-                        <div id="discoverPresets" class="flex gap-2 overflow-x-auto pb-1">
-                            <button type="button" data-discover-preset="fresh" class="quick-filter-pill">🔥 Fresh on OTT</button>
-                            <button type="button" data-discover-preset="profile" class="quick-filter-pill">✨ My Profile</button>
-                            <button type="button" data-discover-preset="hindi" class="quick-filter-pill">🎬 Hindi Movies</button>
-                            <button type="button" data-discover-preset="korean" class="quick-filter-pill">🇰🇷 Korean</button>
-                            <button type="button" data-discover-preset="netflix" class="quick-filter-pill">🍿 Netflix</button>
-                            <button type="button" data-discover-preset="prime" class="quick-filter-pill">⚡ Prime Video</button>
-                            <button type="button" data-discover-preset="comedy" class="quick-filter-pill">🎭 Comedy</button>
-                            <button id="openTrendingFiltersBtn" type="button" class="quick-filter-pill">🎛️ Custom Filters</button>
+                        <div id="discoverPresets" class="flex items-center gap-2">
+                            <button type="button" data-discover-preset="fresh" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">🔥 Trending</button>
+                            <button type="button" data-discover-preset="profile" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">✨ For Me</button>
+                            <button id="openTrendingFiltersBtn" type="button" class="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold dark:bg-slate-800">🎛️ Filter</button>
                         </div>
                         <select id="trendingType" class="hidden"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
                         <select id="trendingFreshness" class="hidden"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
                         <select id="trendingSort" class="hidden"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
                         <button id="loadTrendingBtn" type="button" onclick="resetTrendingDiscover()" class="hidden">Discover</button>
-                        <div id="trendingShelf" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3" aria-live="polite"></div>
+                        <div id="trendingShelf" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3" aria-live="polite"></div>
                         <button id="loadMoreTrendingBtn" type="button" onclick="loadMoreTrending()" class="hidden mx-auto rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold hover:border-sky-400">Load More</button>
                     </div>
                 </details>
@@ -278,6 +259,7 @@
 
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
+            <p class="mt-1">v2.17.0</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
                 <summary class="cursor-pointer text-center">📱 How to Install as App</summary>
                 <ul class="mt-2 space-y-1">
@@ -308,8 +290,12 @@
                     <p id="detailPreviewPlatforms" class="mt-3 text-xs font-semibold text-sky-700 dark:text-sky-300"></p>
                 </div>
             </div>
-            <p id="detailPreviewOverview" class="mt-4 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
+            <p id="detailPreviewOverview" class="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
             <button id="detailPreviewActionBtn" type="button" class="mt-4 w-full rounded-lg bg-sky-500 py-3 text-sm font-bold text-white hover:bg-sky-600"></button>
+            <div id="detailPreviewManageActions" class="hidden mt-3 grid grid-cols-2 gap-2">
+                <button id="detailPreviewRefreshBtn" type="button" class="rounded-lg border border-slate-300 py-2 text-xs font-semibold dark:border-slate-700">↻ Refresh Metadata</button>
+                <button id="detailPreviewDeleteBtn" type="button" class="rounded-lg border border-rose-300 py-2 text-xs font-semibold text-rose-600 dark:border-rose-900 dark:text-rose-400">Delete</button>
+            </div>
         </div>
     </div>
     <div id="toastContainer" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite" aria-atomic="false"></div>

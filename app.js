@@ -112,12 +112,10 @@ const TRENDING_GENRE_IDS = {
 };
 
 const WATCHLIST_TOUR_STEPS = [
-    { selector: '#libraryQuickFilters', title: 'My Library', description: 'Filter saved movies and shows from your library.' },
-    { selector: '#filterDrawer', title: 'Filter your library', description: 'Filter, sort, or group your saved titles. On a phone, the filter drawer opens for this step.' },
-    { selector: '#groupByOptions', title: 'Group your titles', description: 'Choose how to arrange titles into collapsible sections.' },
-    { selector: '#discoverPresets', title: 'Add Titles', description: 'Search TMDB or choose a one-tap India discovery preset.' },
-    { selector: '#candidateSearchInput', title: 'Smart Title Search', description: 'Search once and pick the correct movie or TV show from the best matches.' },
-    { selector: '#openBulkUploadBtn', title: 'Bulk Upload', description: 'Paste a list or caption to add several titles at once.' }
+    { selector: '#activeListSelect', title: 'Your Lists', description: 'Switch between your private list and shared watchlists.' },
+    { selector: '#toggleFilterDrawerBtn', title: 'Library Filters', description: 'Find titles by platform, type, genre, or language.' },
+    { selector: '#candidateSearchInput', title: 'Find a Title', description: 'Search for a movie or show, then add it to your list.' },
+    { selector: '#accountMenuBtn', title: 'Your Account', description: 'Manage your profile, theme, tour, and sign-in.' }
 ];
 
 // ==========================================
@@ -125,15 +123,16 @@ const WATCHLIST_TOUR_STEPS = [
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    document.getElementById('accountMenuBtn')?.addEventListener('click', () => toggleAccountMenu());
     
     const googleBtn = document.getElementById('googleSignInBtn');
     if (googleBtn) googleBtn.addEventListener('click', loginWithGoogle);
 
     const signOutBtn = document.getElementById('signOutBtn');
-    if (signOutBtn) signOutBtn.addEventListener('click', logoutUser);
+    if (signOutBtn) signOutBtn.addEventListener('click', () => { toggleAccountMenu(false); logoutUser(); });
 
     const startTourBtn = document.getElementById('startTourBtn');
-    if (startTourBtn) startTourBtn.addEventListener('click', startWatchlistTour);
+    if (startTourBtn) startTourBtn.addEventListener('click', () => { toggleAccountMenu(false); startWatchlistTour(); });
     const tourNextBtn = document.getElementById('tourNextBtn');
     if (tourNextBtn) tourNextBtn.addEventListener('click', advanceWatchlistTour);
     const tourSkipBtn = document.getElementById('tourSkipBtn');
@@ -147,8 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('candidateResults').replaceChildren();
             document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
             document.getElementById('candidateSearchBtn')?.removeAttribute('disabled');
+            document.getElementById('clearCandidateSearchBtn')?.classList.add('hidden');
             return;
         }
+        document.getElementById('clearCandidateSearchBtn')?.classList.remove('hidden');
         candidateSearchToken += 1;
         clearTimeout(candidateSearchDebounce);
         document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
@@ -163,12 +164,12 @@ document.addEventListener('DOMContentLoaded', () => {
             searchCandidateInput();
         }
     });
-    document.getElementById('openBulkUploadBtn')?.addEventListener('click', openBulkUploadModal);
+    document.getElementById('openBulkUploadBtn')?.addEventListener('click', event => { event.preventDefault(); openBulkUploadModal(); });
     ['closeBulkUploadBtn', 'closeBulkUploadBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeBulkUploadModal));
     document.getElementById('openTrendingFiltersBtn')?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.remove('hidden'));
     ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.add('hidden')));
     document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
-    document.getElementById('openProfileBtn')?.addEventListener('click', openProfileModal);
+    document.getElementById('openProfileBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openProfileModal(); });
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
     document.getElementById('saveProfileBtn')?.addEventListener('click', saveUserProfile);
     document.getElementById('profileModal')?.addEventListener('click', event => {
@@ -192,6 +193,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('mobileNavSharedBtn')?.addEventListener('click', () => document.getElementById('sharedListModal')?.classList.remove('hidden'));
     ['closeDetailPreviewBtn', 'closeDetailPreviewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeDetailPreview));
     document.getElementById('detailPreviewActionBtn')?.addEventListener('click', handleDetailPreviewAction);
+    document.getElementById('detailPreviewRefreshBtn')?.addEventListener('click', async () => {
+        if (!activePreviewItem?.docId) return;
+        await refreshMetadata(activePreviewItem.docId);
+        closeDetailPreview();
+    });
+    document.getElementById('detailPreviewDeleteBtn')?.addEventListener('click', async () => {
+        if (!activePreviewItem?.docId) return;
+        await deleteItem(activePreviewItem.docId);
+        closeDetailPreview();
+    });
     document.getElementById('filterDrawer')?.addEventListener('keydown', event => {
         if (event.key === 'Escape') toggleFilterDrawer();
     });
@@ -203,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDiscoverPresets();
     syncQuickFilterPills();
     updateWatchableNowButton();
+    updateLibraryFilterIndicator();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
@@ -275,11 +287,6 @@ function showWatchlistTourStep() {
     if (tourTarget.id === 'navLibraryBtn') switchView('library');
     else if (tourTarget.id === 'navAddBtn') switchView('add');
     else if (targetView) switchView(targetView.id === 'addView' ? 'add' : 'library');
-
-    if (step.selector === '#openBulkUploadBtn') {
-        tourOpenedBulkPanel = document.getElementById('bulkUploadModal')?.classList.contains('hidden') || false;
-        document.getElementById('bulkUploadModal')?.classList.remove('hidden');
-    }
 
     tourOriginalStyles = {
         outline: tourTarget.style.outline,
@@ -458,6 +465,7 @@ function clearCandidateSearch() {
     const input = document.getElementById('candidateSearchInput');
     const results = document.getElementById('candidateResults');
     if (input) input.value = '';
+    document.getElementById('clearCandidateSearchBtn')?.classList.add('hidden');
     if (results) results.innerHTML = '';
     document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
     document.getElementById('candidateSearchBtn')?.removeAttribute('disabled');
@@ -518,6 +526,18 @@ function toggleFilterDrawer() {
     if (button) button.setAttribute('aria-expanded', String(isOpening));
 }
 
+function toggleAccountMenu(forceOpen) {
+    const menu = document.getElementById('accountMenuModal');
+    if (!menu) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !open);
+}
+
+function updateLibraryFilterIndicator() {
+    const active = ['type', 'platform', 'genre', 'language'].some(name => getMultiFilterValues('library', name).length > 0) || onlyWatchableNow;
+    document.getElementById('libraryFilterDot')?.classList.toggle('hidden', !active);
+}
+
 // Reset library chips, grouping, sorting, and search to their defaults.
 function clearAllLibraryFilters() {
     ['type', 'platform', 'genre', 'language'].forEach(name => setMultiFilterValues('library', name, []));
@@ -529,6 +549,7 @@ function clearAllLibraryFilters() {
     if (search) search.value = '';
     onlyWatchableNow = false;
     updateWatchableNowButton();
+    updateLibraryFilterIndicator();
     saveGroupingPreferencesAndRender();
 }
 
@@ -582,6 +603,7 @@ function toggleManageMode() {
     if (actions) actions.classList.toggle('hidden', !isManageMode);
     if (button) {
         button.setAttribute('aria-pressed', String(isManageMode));
+        button.textContent = isManageMode ? 'Done Managing' : '☑️ Manage / Batch Delete';
         button.classList.toggle('bg-sky-500', isManageMode);
         button.classList.toggle('text-white', isManageMode);
         button.classList.toggle('border-sky-500', isManageMode);
@@ -725,6 +747,7 @@ function toggleWatchableNow() {
     }
     onlyWatchableNow = !onlyWatchableNow;
     updateWatchableNowButton();
+    updateLibraryFilterIndicator();
     renderWatchlist();
 }
 
@@ -941,7 +964,7 @@ function updateActiveListControls() {
     const banner = document.getElementById('sharedListBanner');
     const bannerText = document.getElementById('sharedListBannerText');
     if (banner) banner.classList.toggle('hidden', !activeList);
-    if (bannerText && activeList) bannerText.textContent = `👨‍👩‍👧‍👦 ${activeList.name || 'Shared List'} • Code: ${activeList.inviteCode || 'Unavailable'}`;
+    if (bannerText && activeList) bannerText.textContent = `Code: ${activeList.inviteCode || 'Unavailable'}`;
     document.getElementById('deleteAllBtn')?.classList.toggle('hidden', activeListId !== 'personal');
 }
 
@@ -1154,6 +1177,7 @@ function renderPillFilterGroup(containerId, scope, name, options, selectedValues
             label.classList.toggle('active', input.checked);
             if (scope === 'library') {
                 syncQuickFilterPills();
+                updateLibraryFilterIndicator();
                 renderWatchlist();
             } else resetTrendingDiscover();
         });
@@ -1258,7 +1282,10 @@ function setMultiFilterValues(scope, name, values) {
     });
     const details = document.querySelector(`[data-multi-summary="${scope}:${name}"]`)?.closest('details');
     if (details) updateCheckboxDropdownSummary(details);
-    if (scope === 'library') syncQuickFilterPills();
+    if (scope === 'library') {
+        syncQuickFilterPills();
+        updateLibraryFilterIndicator();
+    }
 }
 
 // Build default library and discovery chips, then fill library choices from saved titles.
@@ -1604,6 +1631,7 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     const platforms = document.getElementById('detailPreviewPlatforms');
     const overview = document.getElementById('detailPreviewOverview');
     const action = document.getElementById('detailPreviewActionBtn');
+    const manageActions = document.getElementById('detailPreviewManageActions');
     const imageUrl = item.poster || null;
     poster.classList.toggle('hidden', !imageUrl);
     fallback.classList.toggle('hidden', Boolean(imageUrl));
@@ -1618,12 +1646,14 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     const availablePlatforms = item.platforms?.length ? item.platforms : (item.platform ? [item.platform] : []);
     platforms.textContent = `🇮🇳 India OTTs: ${availablePlatforms.join(', ') || 'Not available'}`;
     action.textContent = isSaved ? (item.watched ? '↩️ Mark To Watch' : '✓ Mark Watched') : '+ Add to Watchlist';
-    if (!item.platforms?.length && !item.platform && (item.id || item.tmdbId)) {
+    manageActions?.classList.toggle('hidden', !isSaved);
+    if ((!Array.isArray(item.platforms) || !item.platforms.length) && (item.id || item.tmdbId)) {
         platforms.textContent = '🇮🇳 India OTTs: Loading…';
         const mediaType = item.mediaType || item.type;
         const providerNames = await fetchCandidateIndiaPlatforms(mediaType, item.id || item.tmdbId);
         if (activePreviewItem === item) {
             item.platforms = providerNames;
+            if (!item.platform && providerNames.length) item.platform = providerNames[0];
             platforms.textContent = `🇮🇳 India OTTs: ${providerNames.join(', ') || 'Not available'}`;
         }
     }
@@ -2205,46 +2235,68 @@ function renderGroupedCards(parentContainer, items, primaryGroup, secondaryGroup
 
 function renderGroupCards(parentContainer, items) {
     const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 my-2';
+    grid.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 my-2';
 
     items.forEach(item => {
         renderedDocIds.add(item.docId);
         const card = document.createElement('div');
-        card.className = `movie-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between transition-all hover:-translate-y-1 hover:border-sky-400 ${item.watched ? 'opacity-50' : ''}`;
-        
+        card.className = 'movie-card min-w-0';
         const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
-        const posterHtml = item.poster ? `<img src="${item.poster}" alt="Poster for ${item.title}" tabindex="0" role="button" class="library-poster aspect-[2/3] w-full cursor-pointer object-cover">` : `<div tabindex="0" role="button" class="library-poster flex aspect-[2/3] w-full cursor-pointer items-center justify-center bg-slate-200 dark:bg-slate-950 text-3xl">🎬</div>`;
-
-        const needsMetadata = !item.language || !item.rating || item.rating === 'N/A';
-        const onYourOTT = itemIsOnSubscribedOTT(item);
-        card.innerHTML = `
-            <div class="relative">
-                ${posterHtml}
-                <span class="absolute top-2 right-2 px-2 py-0.5 text-[10px] font-extrabold rounded-full text-white uppercase shadow-md ${badgeClass}">${mainPlatform}</span>
-                <span class="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] font-bold rounded bg-slate-950/80 text-amber-300 backdrop-blur-sm">⭐ ${item.rating || 'N/A'}</span>
-        ${isManageMode ? `<label class="absolute top-2 left-2 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-slate-950/80" title="Select ${item.title}">
-                    <input type="checkbox" aria-label="Select ${item.title}" ${selectedDocIds.has(item.docId) ? 'checked' : ''} onchange="toggleItemSelection('${item.docId}', this.checked)" class="accent-sky-500">
-                </label>` : ''}
-                ${needsMetadata ? `<button title="Refresh metadata" aria-label="Refresh metadata for ${item.title}" class="absolute top-2 left-11 w-7 h-7 rounded-full bg-slate-950/80 text-white hover:bg-sky-600" onclick="refreshMetadata('${item.docId}')">↻</button>` : ''}
-            </div>
-            <div class="p-3 flex-1 flex flex-col justify-between">
-                <div>
-                    <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 leading-snug line-clamp-2 ${item.watched ? 'line-through text-slate-400' : ''}">${item.title}</h4>
-                    <div class="text-xs text-slate-500 dark:text-slate-400 space-x-2 mt-1">
-                        <span>🌐 ${item.language || 'Unknown Language'}</span>
-                        <span>🗓️ ${item.year || 'N/A'}</span>
-                    </div>
-                    ${onYourOTT ? '<span class="mt-2 inline-flex rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">✓ On Your OTT</span>' : ''}
-                </div>
-                <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-                    <button class="${item.watched ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}" onclick="toggleWatched('${item.docId}')">
-                        ${item.watched ? '↩️ Unwatch' : '✓ Watched'}
-                    </button>
-                    <button class="text-rose-500 hover:text-rose-400 font-semibold" onclick="deleteItem('${item.docId}')">Delete</button>
-                </div>
-            </div>
-        `;
+        const posterFrame = document.createElement('div');
+        posterFrame.className = 'relative overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800';
+        const poster = item.poster ? document.createElement('img') : document.createElement('div');
+        poster.className = `library-poster aspect-[2/3] w-full cursor-pointer object-cover ${item.poster ? '' : 'flex items-center justify-center text-3xl'}`;
+        if (item.poster) {
+            poster.src = item.poster;
+            poster.alt = `Poster for ${item.title}`;
+            poster.tabIndex = 0;
+            poster.setAttribute('role', 'button');
+        } else {
+            poster.textContent = '🎬';
+            poster.tabIndex = 0;
+            poster.setAttribute('role', 'button');
+        }
+        posterFrame.appendChild(poster);
+        const badge = document.createElement('span');
+        badge.className = `absolute right-2 top-2 max-w-[80%] truncate rounded-full px-2 py-1 text-[9px] font-bold uppercase text-white shadow ${badgeClass}`;
+        badge.textContent = mainPlatform;
+        posterFrame.appendChild(badge);
+        const rating = document.createElement('span');
+        rating.className = 'absolute bottom-2 left-2 rounded-md bg-slate-950/75 px-1.5 py-1 text-[10px] font-semibold text-amber-300';
+        rating.textContent = `⭐ ${item.rating || 'N/A'}`;
+        posterFrame.appendChild(rating);
+        if (isManageMode) {
+            const selector = document.createElement('input');
+            selector.type = 'checkbox';
+            selector.setAttribute('aria-label', `Select ${item.title}`);
+            selector.checked = selectedDocIds.has(item.docId);
+            selector.className = 'absolute left-2 top-2 h-5 w-5 accent-sky-500';
+            selector.addEventListener('change', () => toggleItemSelection(item.docId, selector.checked));
+            posterFrame.appendChild(selector);
+        }
+        card.appendChild(posterFrame);
+        const title = document.createElement('button');
+        title.type = 'button';
+        title.className = `mt-2 block w-full truncate text-left text-sm font-semibold text-slate-900 dark:text-slate-100 ${item.watched ? 'text-slate-400 line-through' : ''}`;
+        title.textContent = item.title || 'Untitled';
+        title.addEventListener('click', () => openDetailPreview(item, true));
+        card.appendChild(title);
+        const bottom = document.createElement('div');
+        bottom.className = 'mt-1 flex min-w-0 items-center justify-between gap-1 text-[10px]';
+        const watched = document.createElement('button');
+        watched.type = 'button';
+        watched.className = item.watched ? 'truncate font-semibold text-amber-600' : 'truncate font-semibold text-emerald-600';
+        watched.textContent = item.watched ? '↩️ Unwatch' : '✓ Watched';
+        watched.addEventListener('click', () => toggleWatched(item.docId));
+        bottom.appendChild(watched);
+        if (activeListId !== 'personal') {
+            const attribution = document.createElement('span');
+            attribution.className = 'truncate text-slate-400';
+            attribution.textContent = `By ${item.addedBy || 'Member'}`;
+            bottom.appendChild(attribution);
+        }
+        card.appendChild(bottom);
         const posterTrigger = card.querySelector('.library-poster');
         posterTrigger?.addEventListener('click', () => openDetailPreview(item, true));
         posterTrigger?.addEventListener('keydown', event => {
@@ -2253,12 +2305,6 @@ function renderGroupCards(parentContainer, items) {
                 openDetailPreview(item, true);
             }
         });
-        if (activeListId !== 'personal') {
-            const attribution = document.createElement('p');
-            attribution.className = 'mt-2 text-[10px] text-slate-400 dark:text-slate-500';
-            attribution.textContent = `By ${item.addedBy || 'Member'}`;
-            card.querySelector('.p-3 > div')?.appendChild(attribution);
-        }
         grid.appendChild(card);
     });
 
