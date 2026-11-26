@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.19.0**
+**Current version: v2.19.1**
 
 ## 1. Project Vision
 
@@ -18,13 +18,19 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.19.0
+## 3. Completed Features Through v2.19.1
 
 ### v2.19.0 AI Curator
 
 - Added `POST /ai/recommend` to `worker.js`, which calls Gemini 3.8 Flash with the user's liked titles, languages, genres, subscriptions, exclusions, and optional mood.
 - Added the **🤖 AI Picks** chip and optional mood prompt to Discover. AI suggestions are matched through TMDB for poster, streaming, quick add, hide, and preview behavior; preview sheets include the AI pitch.
-- Current version is **v2.19.0**.
+
+### v2.19.1 Taste Wizard and Gemini curator
+
+- Reworked `#tasteOnboardingModal` into a language and genre preference step followed by one poster screen per selected pair, with search, pagination, and early finish.
+- Added persisted `dismissedTitles` as negative curator signals alongside separate loved and saved-to-watch buckets.
+- Upgraded the Gemini prompt to return 12 picks across direct matches, recent releases, and hidden gems / cross-language discoveries.
+- Current version is **v2.19.1**.
 - Remaining roadmap: **4-Friend Watch Circle** ratings and `watchedBy`, JSON/CSV Export & Import, and OMDb IMDb/RT scores.
 
 ## Previous release notes

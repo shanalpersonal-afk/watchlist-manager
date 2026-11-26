@@ -3,6 +3,7 @@
 // ==========================================
 // Recent release notes shown in the What's New sheet.
 const APP_UPDATES = [
+    { version: 'v2.19.1', date: '2026-11-27', title: 'Taste Wizard and smarter AI picks', items: ['Choose language and genre poster steps with more titles and Load More.', 'Gemini weighs loved, saved, and dismissed titles separately.'] },
     { version: 'v2.19.0', date: '2026-11-27', title: 'AI Picks', items: ['Ask Gemini for movie and TV recommendations based on your taste, subscriptions, and optional mood.', 'AI titles are matched through TMDB so India OTT details and quick add actions remain available.'] },
     { version: 'v2.18.0', date: '2026-11-27', title: 'Taste based picks and free streaming', items: ['Find free and ad supported India streaming options for titles.', 'Get recommendations based on titles you have watched or loved.', 'Set your taste profile with a guided movie and show picker.'] },
     { version: 'v2.17.3', date: '2026-11-27', title: 'Discover and onboarding', items: ['Hide Discover recommendations and undo the action; reset hidden titles from your profile.', 'New users are guided through the app automatically.', 'See recent changes in the new What’s New sheet.'] },
@@ -129,7 +130,7 @@ let unsubscribeSharedLists = null;
 let isCreatingList = false;
 let currentWatchlistItems = [];
 let currentUser = null;
-let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
+let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
 let userProfileUid = null;
 let userProfileLoadPromise = Promise.resolve();
 const selectedDocIds = new Set();
@@ -162,6 +163,11 @@ let tasteSelectedSeeds = new Map();
 let tasteSearchTimer = null;
 let tasteSearchToken = 0;
 let tastePopularItems = [];
+let tasteSteps = [];
+let tasteStepIndex = 0;
+let tastePage = 1;
+let tastePairItems = [];
+let tastePairSeen = new Set();
 const trendingCache = new Map();
 let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
@@ -280,7 +286,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const query = event.target.value.trim();
         clearTimeout(tasteSearchTimer);
         const token = ++tasteSearchToken;
-        if (!query) { renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]); return; }
+        document.getElementById('tasteLoadMoreBtn')?.classList.toggle('hidden', Boolean(query));
+        if (!query) { renderTasteTitleGrid(tastePairItems); return; }
         tasteSearchTimer = window.setTimeout(async () => {
             try {
                 const results = await searchTMDBCandidates(query);
@@ -291,6 +298,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 350);
     });
     document.getElementById('saveTasteProfileBtn')?.addEventListener('click', saveTasteOnboarding);
+    document.getElementById('tasteNextBtn')?.addEventListener('click', nextTasteStep);
+    document.getElementById('tasteBackBtn')?.addEventListener('click', previousTasteStep);
+    document.getElementById('tasteSkipStepBtn')?.addEventListener('click', skipTasteStep);
+    document.getElementById('tasteLoadMoreBtn')?.addEventListener('click', () => loadTastePairPage(true));
     document.getElementById('profileModal')?.addEventListener('click', event => {
         if (event.target.id === 'profileModal') closeProfileModal();
     });
@@ -781,24 +792,23 @@ async function loadAIPicksRecommendations() {
     document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
     renderTrendingSkeletons(shelf);
 
-    const orderedLiked = [
-        ...currentWatchlistItems.filter(item => item.watched),
-        ...currentWatchlistItems.filter(item => !item.watched),
-        ...(userProfile.tasteSeedMovies || [])
-    ];
-    const likedTitles = [...new Map(orderedLiked.map(item => {
+    const cleanBucket = items => [...new Map(items.map(item => {
         const title = String(item.title || '').trim();
         return [title.toLocaleLowerCase(), title];
     }).filter(([key, title]) => key && title)).values()];
-    const excludeTitles = [...new Set(currentWatchlistItems.map(item => String(item.title || '').trim()).filter(Boolean))];
-
+    const lovedTitles = cleanBucket([...(userProfile.tasteSeedMovies || []), ...currentWatchlistItems.filter(item => item.watched)]);
+    const savedToWatch = cleanBucket(currentWatchlistItems.filter(item => !item.watched));
+    const dismissedTitles = cleanBucket((userProfile.dismissedTitles || []).map(title => ({ title })));
+    const excludeTitles = cleanBucket([...currentWatchlistItems.map(item => ({ title: item.title })), ...dismissedTitles].map(item => ({ title: item.title })));
     try {
         const workerUrl = `${String(TMDB_PROXY_URL || '').replace(/\/+$/, '')}/ai/recommend`;
         const response = await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                likedTitles,
+                lovedTitles,
+                savedToWatch,
+                dismissedTitles,
                 languages: userProfile.languages || [],
                 genres: userProfile.genres || [],
                 subscriptions: userProfile.subscriptions || [],
@@ -817,17 +827,19 @@ async function loadAIPicksRecommendations() {
             const sameType = matches.filter(match => match.mediaType === expectedType);
             const desiredYear = String(recommendation.year || '');
             const desiredYearNumber = Number(desiredYear);
+            const normalizedTitle = String(recommendation.title || '').trim().toLocaleLowerCase();
             const match = sameType.slice().sort((a, b) => {
+                const titleMatch = candidate => [candidate.title, candidate.originalTitle].some(value => String(value || '').trim().toLocaleLowerCase() === normalizedTitle);
                 const yearDistance = candidate => Number.isFinite(desiredYearNumber) && Number.isFinite(Number(candidate.year))
                     ? Math.abs(Number(candidate.year) - desiredYearNumber)
                     : Number.POSITIVE_INFINITY;
-                return yearDistance(a) - yearDistance(b) || (b.popularity || 0) - (a.popularity || 0);
+                return Number(titleMatch(b)) - Number(titleMatch(a)) || yearDistance(a) - yearDistance(b) || (b.popularity || 0) - (a.popularity || 0);
             })[0];
             if (!match) return null;
             return { ...match, aiReason: String(recommendation.reason || '').trim() };
         }));
         if (requestToken !== trendingLoadToken) return;
-        const candidates = [...new Map(enrichedResults.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []).map(candidate => [String(candidate.id), candidate])).values()]
+        const candidates = [...new Map(enrichedResults.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []).map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()]
             .filter(candidate => !isAlreadyInWatchlist(candidate) && !userProfile.dismissedIds.includes(String(candidate.id)))
             .slice(0, 10);
         if (!candidates.length) throw new Error('AI titles could not be matched in TMDB.');
@@ -876,6 +888,7 @@ function normalizeUserProfile(profile) {
         languages: Array.isArray(source.languages) ? [...new Set(source.languages.filter(value => Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, value)))] : [],
         genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : [],
         dismissedIds: Array.isArray(source.dismissedIds) ? [...new Set(source.dismissedIds.map(String))] : [],
+        dismissedTitles: Array.isArray(source.dismissedTitles) ? [...new Set(source.dismissedTitles.map(value => String(value || '').trim()).filter(Boolean))] : [],
         hasCompletedTour: source.hasCompletedTour === true,
         hasCompletedTasteOnboarding: source.hasCompletedTasteOnboarding === true,
         tasteSeedMovies: Array.isArray(source.tasteSeedMovies) ? source.tasteSeedMovies.filter(seed => seed && seed.id && (seed.mediaType === 'movie' || seed.mediaType === 'tv')).map(seed => ({ id: seed.id, mediaType: seed.mediaType, title: String(seed.title || ''), poster: seed.poster || null })).slice(0, 20) : []
@@ -901,37 +914,84 @@ function applyProfileDefaultsToDiscover() {
     updateDiscoverFilterUI();
 }
 
-// Open taste setup with saved chips and a set of popular titles.
+// Open the preference step with saved choices and prepare language/genre poster steps.
 async function openTasteOnboardingModal() {
     const uid = currentUser?.uid;
     if (!uid || userProfileUid !== uid) return;
     tasteSelectedLanguages = new Set(userProfile.languages || []);
     tasteSelectedGenres = new Set(userProfile.genres || []);
     tasteSelectedSeeds = new Map((userProfile.tasteSeedMovies || []).map(seed => [`${seed.mediaType}:${seed.id}`, seed]));
+    tasteStepIndex = 0;
+    tasteSteps = [];
     renderTasteChoicePills();
-    renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]);
-    updateTasteSaveButton();
+    renderTasteWizard();
     showModal('tasteOnboardingModal');
-    if (tastePopularItems.length) return;
-    const titleGrid = document.getElementById('tasteSearchResults');
-    if (titleGrid) titleGrid.textContent = 'Loading popular titles…';
-    const results = await Promise.allSettled(['hi', 'en', 'ta', 'ko'].flatMap(language => ['movie', ...(language === 'en' || language === 'hi' ? ['tv'] : [])].map(async mediaType => {
-        const params = new URLSearchParams({ sort_by: 'popularity.desc', 'vote_count.gte': '100', with_original_language: language, page: '1' });
-        const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
-        if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
-        const data = await response.json();
-        return (data.results || []).slice(0, 8).map(result => mapTrendingResult(result, mediaType));
-    })));
-    const seen = new Set();
-    tastePopularItems = results.flatMap(result => result.status === 'fulfilled' ? result.value : []).filter(item => {
-        const key = `${item.mediaType}:${item.id}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    }).slice(0, 15);
-    if (!tastePopularItems.length) tastePopularItems = [...tasteSelectedSeeds.values()];
-    if (currentUser?.uid === uid && !document.getElementById('tasteOnboardingModal')?.classList.contains('hidden') && !document.getElementById('tasteSearchInput')?.value.trim()) {
-        renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]);
+}
+
+// Build the selected language × genre combinations, with sensible defaults.
+function buildTasteSteps() {
+    const languages = [...tasteSelectedLanguages];
+    const genres = [...tasteSelectedGenres];
+    const fallbackLanguages = languages.length ? languages : ['en', 'hi'];
+    const fallbackGenres = genres.length ? genres : ['Drama'];
+    tasteSteps = fallbackLanguages.flatMap(language => fallbackGenres.map(genre => ({ language, genre })));
+}
+
+// Show preferences or the current pair screen and refresh its posters.
+function renderTasteWizard() {
+    const preferences = document.getElementById('tastePreferencesStep');
+    const posters = document.getElementById('tastePosterStep');
+    const isPreferences = tasteStepIndex === 0;
+    preferences?.classList.toggle('hidden', !isPreferences);
+    posters?.classList.toggle('hidden', isPreferences);
+    document.getElementById('tasteBackBtn')?.classList.toggle('hidden', isPreferences);
+    document.getElementById('tasteSkipStepBtn')?.classList.toggle('hidden', isPreferences);
+    document.getElementById('tasteNextBtn')?.classList.toggle('hidden', false);
+    const nextButton = document.getElementById('tasteNextBtn');
+    if (nextButton) nextButton.textContent = isPreferences ? 'Next →' : (tasteStepIndex >= tasteSteps.length ? 'Finish →' : 'Next →');
+    if (!isPreferences) {
+        const pair = tasteSteps[tasteStepIndex - 1];
+        const header = document.getElementById('tasteStepHeader');
+        if (header) header.textContent = `Step ${tasteStepIndex + 1} of ${tasteSteps.length + 1} • ${LANGUAGE_NAMES[pair.language] || pair.language} • ${pair.genre}`;
+        loadTastePairPage(false);
+    }
+    updateTasteSaveButton();
+}
+
+// Move from preferences into poster browsing.
+function nextTasteStep() { if (tasteStepIndex === 0) buildTasteSteps(); if (tasteStepIndex >= tasteSteps.length) { saveTasteOnboarding(); return; } tasteStepIndex += 1; renderTasteWizard(); }
+// Return one screen in the taste wizard.
+function previousTasteStep() { tasteStepIndex = Math.max(0, tasteStepIndex - 1); renderTasteWizard(); }
+// Skip the current pair and finish when the last pair is reached.
+function skipTasteStep() { if (tasteStepIndex >= tasteSteps.length) return saveTasteOnboarding(); tasteStepIndex += 1; renderTasteWizard(); }
+
+// Fetch a popularity sorted page for the current exact language and genre pair.
+async function loadTastePairPage(append = false) {
+    const pair = tasteSteps[tasteStepIndex - 1];
+    if (!pair) return;
+    if (!append) { tastePage = 1; tastePairItems = []; tastePairSeen = new Set(); }
+    else tastePage += 1;
+    const container = document.getElementById('tasteSearchResults');
+    const more = document.getElementById('tasteLoadMoreBtn');
+    document.getElementById('tasteLoadMoreBtn')?.classList.remove('hidden');
+    if (!append && container) container.textContent = 'Loading titles…';
+    if (more) more.disabled = true;
+    const voteCount = ['hi', 'ta', 'te', 'ml', 'kn'].includes(pair.language) ? 5 : 20;
+    try {
+        const results = await Promise.all(['movie', 'tv'].map(async mediaType => {
+            const params = new URLSearchParams({ sort_by: 'popularity.desc', with_original_language: pair.language, with_genres: String(TRENDING_GENRE_IDS[pair.genre]), 'vote_count.gte': String(voteCount), page: String(tastePage) });
+            const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
+            if (!response.ok) throw new Error('TMDB discovery failed.');
+            const data = await response.json();
+            return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+        }));
+        const items = results.flat().filter(item => { const key = `${item.mediaType}:${item.id}`; if (tastePairSeen.has(key)) return false; tastePairSeen.add(key); return true; });
+        tastePairItems = append ? [...tastePairItems, ...items] : items;
+        renderTasteTitleGrid(tastePairItems);
+        if (more) more.disabled = false;
+    } catch (error) {
+        if (container && !append) container.textContent = 'Titles are unavailable right now.';
+        if (more) more.disabled = false;
     }
 }
 
@@ -1011,18 +1071,18 @@ function renderTasteTitleGrid(items) {
     });
 }
 
-// Keep the selected-title count and minimum-pick action in sync.
+// Keep the selected-title count and early-finish highlight in sync.
 function updateTasteSaveButton() {
     const count = tasteSelectedSeeds.size;
     const button = document.getElementById('saveTasteProfileBtn');
     const label = document.getElementById('tasteSelectionCount');
-    if (label) label.textContent = `Pick 3+ titles you loved (${count}/3)`;
-    if (button) button.disabled = count < 3;
+    if (label) label.textContent = `${count} titles selected`;
+    if (button) { button.textContent = `✨ Finish & Show Picks (${count} selected)`; button.classList.toggle('bg-amber-500', count >= 5); button.classList.toggle('bg-slate-300', count < 5); }
 }
 
 // Save selected taste chips and seed titles to the signed-in profile.
 async function saveTasteOnboarding() {
-    if (tasteSelectedSeeds.size < 3 || !currentUser) return;
+    if (!currentUser) return;
     userProfile.languages = [...tasteSelectedLanguages];
     userProfile.genres = [...tasteSelectedGenres];
     userProfile.tasteSeedMovies = [...tasteSelectedSeeds.values()].slice(0, 20);
@@ -1061,7 +1121,7 @@ async function resetTasteOnboarding() {
 async function loadUserProfile() {
     if (!currentUser) return;
     const uid = currentUser.uid;
-    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
+    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
     try {
         localProfile = normalizeUserProfile(JSON.parse(localStorage.getItem(getUserProfileStorageKey(uid)) || '{}'));
     } catch (error) {
@@ -2253,7 +2313,7 @@ async function loadPersonalizedRecommendations() {
         }));
         if (requestToken !== trendingLoadToken) return;
         const merged = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
-        const unique = [...new Map(merged.map(candidate => [String(candidate.id), candidate])).values()]
+        const unique = [...new Map(merged.map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()]
             .filter(candidate => !isAlreadyInWatchlist(candidate) && !userProfile.dismissedIds.includes(String(candidate.id)))
             .slice(0, 12);
         renderTrendingShelf(unique);
@@ -2421,7 +2481,7 @@ async function loadTrendingDiscover() {
             }
         } else {
             candidates = sortCandidates(resultSets.flatMap(resultSet => resultSet.candidates));
-            candidates = [...new Map(candidates.map(candidate => [String(candidate.id), candidate])).values()];
+            candidates = [...new Map(candidates.map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()];
             candidates = candidates.filter(candidate => !displayedTrendingIds.has(String(candidate.id)) && !isAlreadyInWatchlist(candidate) && !profile.dismissedIds.includes(String(candidate.id))).slice(0, 12);
         }
 
@@ -2574,19 +2634,22 @@ async function dismissRecommendation(tmdbId, title = 'Recommendation') {
     if (!currentUser || userProfileUid !== currentUser.uid || tmdbId == null) return;
     const id = String(tmdbId);
     userProfile.dismissedIds = [...new Set([...(userProfile.dismissedIds || []), id])];
+    const cleanTitle = String(title || '').trim();
+    if (cleanTitle) userProfile.dismissedTitles = [...new Set([...(userProfile.dismissedTitles || []), cleanTitle])];
     trendingCache.clear();
     document.querySelector(`#trendingShelf article[data-tmdb-id="${CSS.escape(id)}"]`)?.remove();
     displayedTrendingIds.delete(id);
     const count = document.getElementById('hiddenRecommendationsCount');
     if (count) count.textContent = String(userProfile.dismissedIds.length);
     await persistUserProfileSilently();
-    showToast(`Hidden ${title}.`, 'success', { label: 'Undo', onClick: () => undoDismissRecommendation(id) });
+    showToast(`Hidden ${title}.`, 'success', { label: 'Undo', onClick: () => undoDismissRecommendation(id, cleanTitle) });
 }
 
 // Restore a hidden Discover title and refresh recommendations.
-async function undoDismissRecommendation(tmdbId) {
+async function undoDismissRecommendation(tmdbId, title = '') {
     const id = String(tmdbId);
     userProfile.dismissedIds = (userProfile.dismissedIds || []).filter(value => String(value) !== id);
+    if (title) userProfile.dismissedTitles = (userProfile.dismissedTitles || []).filter(value => value !== title);
     trendingCache.clear();
     await persistUserProfileSilently();
     resetTrendingDiscover();
@@ -2595,6 +2658,7 @@ async function undoDismissRecommendation(tmdbId) {
 // Clear all hidden recommendations and reload Discover.
 async function resetDismissedRecommendations() {
     userProfile.dismissedIds = [];
+    userProfile.dismissedTitles = [];
     const count = document.getElementById('hiddenRecommendationsCount');
     if (count) count.textContent = '0';
     trendingCache.clear();

@@ -80,7 +80,7 @@ export default {
     }
 };
 
-// Ask Gemini for ten recommendations using the user's taste and exclusions.
+// Ask Gemini for balanced picks using positive, saved, and negative taste signals.
 async function handleAiRecommendations(request, env, origin) {
     if (!env?.GEMINI_API_KEY) {
         return jsonResponse({ error: 'GEMINI_API_KEY secret is not configured.' }, 500, origin);
@@ -93,9 +93,9 @@ async function handleAiRecommendations(request, env, origin) {
         return jsonResponse({ error: 'Request body must be valid JSON.' }, 400, origin);
     }
     const {
-        likedTitles = [], languages = [], genres = [], subscriptions = [], excludeTitles = [], moodPrompt = ''
+        lovedTitles = [], savedToWatch = [], dismissedTitles = [], languages = [], genres = [], subscriptions = [], excludeTitles = [], moodPrompt = ''
     } = body && typeof body === 'object' ? body : {};
-    const prompt = buildAiRecommendationPrompt({ likedTitles, languages, genres, subscriptions, excludeTitles, moodPrompt });
+    const prompt = buildAiRecommendationPrompt({ lovedTitles, savedToWatch, dismissedTitles, languages, genres, subscriptions, excludeTitles, moodPrompt });
 
     try {
         const upstreamResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
@@ -120,11 +120,12 @@ async function handleAiRecommendations(request, env, origin) {
             .filter(item => item && typeof item.title === 'string' && item.title.trim())
             .filter(item => !exclusions.has(normalizeTitleForExclude(item.title)))
             .filter(item => item.mediaType === 'movie' || item.mediaType === 'tv')
-            .slice(0, 10)
+            .slice(0, 12)
             .map(item => ({
                 title: item.title.trim(),
                 year: String(item.year || ''),
                 mediaType: item.mediaType,
+                language: String(item.language || ''),
                 reason: String(item.reason || 'A strong match for your viewing taste.').trim()
             }));
         return jsonResponse({ recommendations }, 200, origin);
@@ -133,18 +134,27 @@ async function handleAiRecommendations(request, env, origin) {
     }
 }
 
-// Build one clear prompt with the profile details and do-not-repeat list.
-function buildAiRecommendationPrompt({ likedTitles, languages, genres, subscriptions, excludeTitles, moodPrompt }) {
+// Build the three-bucket Gemini prompt and enforce the requested recommendation mix.
+function buildAiRecommendationPrompt({ lovedTitles, savedToWatch, dismissedTitles, languages, genres, subscriptions, excludeTitles, moodPrompt }) {
     return [
-        'Act as an Indian and global streaming curator. Recommend exactly 10 specific movies or TV shows.',
-        'Return only a JSON array. Each object must have exactly these useful fields: { "title": "...", "year": "2023", "mediaType": "movie" or "tv", "reason": "Short 1-line pitch" }. Do not wrap the JSON in markdown.',
-        'Match the liked titles, language preferences, genres, and mood. Balance recommendations across all listed languages; give extra weight to Indian languages when any are selected. Prefer titles available on the listed subscriptions when possible.',
-        `Liked titles: ${JSON.stringify(Array.isArray(likedTitles) ? likedTitles : [])}`,
+        'Act as a thoughtful Indian and global streaming curator. Return exactly 12 specific movie or TV recommendations.',
+        'Split the 12 into 4 direct vibe matches, 4 recent OTT releases from 2022–2026, and 4 hidden gems or cross-language picks.',
+        'Balance the recommendations evenly across every chosen language. Prefer the listed subscriptions when possible.',
+        'Treat lovedTitles as the strongest positive signals. Each direct vibe match reason must reference one loved title by name.',
+        'Treat savedToWatch as titles the user plans to watch; use them as context without recommending them again.',
+        'Treat dismissedTitles as negative signals and avoid similar tone, style, or storytelling.',
+        'Avoid obvious IMDb Top-10 clichés (Inception, Dark, Parasite, Breaking Bad, 3 Idiots) unless essential to the taste match.',
+        'Never repeat any excludeTitles, including alternate spellings or translations.',
+        'Each reason must be a concise 10-word pitch; for direct vibe matches reference a loved title.',
+        'Return only a strict JSON array. Every object must have exactly: { "title": "...", "year": "YYYY", "mediaType": "movie" | "tv", "language": "...", "reason": "..." }. No markdown.',
+        `Loved titles: ${JSON.stringify(Array.isArray(lovedTitles) ? lovedTitles : [])}`,
+        `Saved to watch: ${JSON.stringify(Array.isArray(savedToWatch) ? savedToWatch : [])}`,
+        `Dismissed titles: ${JSON.stringify(Array.isArray(dismissedTitles) ? dismissedTitles : [])}`,
         `Languages: ${JSON.stringify(Array.isArray(languages) ? languages : [])}`,
         `Genres: ${JSON.stringify(Array.isArray(genres) ? genres : [])}`,
         `Subscriptions: ${JSON.stringify(Array.isArray(subscriptions) ? subscriptions : [])}`,
         `Mood: ${String(moodPrompt || '').slice(0, 500)}`,
-        `Strictly exclude these titles and do not recommend alternate spellings of them: ${JSON.stringify(Array.isArray(excludeTitles) ? excludeTitles : [])}`
+        `Strict exclusions: ${JSON.stringify(Array.isArray(excludeTitles) ? excludeTitles : [])}`
     ].join('\n');
 }
 
