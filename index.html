@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.15.1</title>
+    <title>Watchlist Studio v2.16.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -17,6 +17,9 @@
         .badge-prime { background-color: #0284c7; }
         .badge-hotstar { background-color: #0d9488; }
         .badge-jiocinema { background-color: #ec4899; }
+        .quick-filter-pill, .option-chip { flex: 0 0 auto; border: 1px solid rgb(203 213 225); border-radius: 9999px; padding: .45rem .8rem; font-size: .75rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, color .15s, border-color .15s; }
+        .dark .quick-filter-pill, .dark .option-chip { border-color: rgb(51 65 85); }
+        .quick-filter-pill.active, .option-chip.active { background: #0ea5e9; border-color: #0ea5e9; color: white; }
     </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen p-4 md:p-8 max-w-7xl mx-auto transition-colors duration-200">
@@ -51,10 +54,10 @@
     </div>
 
     <!-- Main Dashboard -->
-    <div id="appDashboard" class="hidden">
+    <div id="appDashboard" class="hidden pb-24 md:pb-8">
         <header class="flex flex-wrap items-center justify-between gap-2 mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.15.1</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.16.0</span></h1>
             </div>
             <div class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
                 <button id="startTourBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
@@ -69,7 +72,7 @@
             </div>
         </header>
 
-        <nav class="flex gap-2 mb-6" aria-label="Main navigation">
+        <nav class="hidden md:flex gap-2 mb-6" aria-label="Main navigation">
             <button id="navLibraryBtn" type="button" onclick="switchView('library')" class="rounded-lg border px-4 py-2 text-sm font-bold transition-colors">📚 My Library</button>
             <button id="navAddBtn" type="button" onclick="switchView('add')" class="rounded-lg border px-4 py-2 text-sm font-bold transition-colors">➕ Add Titles</button>
         </nav>
@@ -95,36 +98,50 @@
                     <button id="watchableNowBtn" type="button" onclick="toggleWatchableNow()" aria-pressed="false" class="rounded-full border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:border-emerald-500">✓ Watchable Now</button>
                 </div>
 
+                <div id="libraryQuickFilters" class="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Quick filters">
+                    <button type="button" data-quick-scope="library" data-quick-name="type" data-quick-value="movie" class="quick-filter-pill">🎬 Movies</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="type" data-quick-value="tv" class="quick-filter-pill">📺 TV</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Netflix" class="quick-filter-pill">Netflix</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Prime Video" class="quick-filter-pill">Prime Video</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="platform" data-quick-value="Disney+ Hotstar" class="quick-filter-pill">Disney+ Hotstar</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="Hindi" class="quick-filter-pill">Hindi</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="English" class="quick-filter-pill">English</button>
+                    <button type="button" data-quick-scope="library" data-quick-name="language" data-quick-value="Korean" class="quick-filter-pill">Korean</button>
+                </div>
+
                 <div id="searchBarPanel" class="hidden mt-3 flex max-w-lg items-center gap-2">
                     <input type="text" id="searchQuery" placeholder="Search your library..." oninput="renderWatchlist()" class="min-w-0 flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm">
                     <button id="clearLibrarySearchBtn" type="button" aria-label="Clear library search" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold hover:border-sky-400">✕</button>
                 </div>
 
-                <div id="filterDrawer" class="hidden grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
-                    <div>
-                        <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Type</label>
-                        <div id="filterTypeOptions"></div>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Platform</label>
-                        <div id="filterPlatformOptions"></div>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Genre</label>
-                        <div id="filterGenreOptions"></div>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Language</label>
-                        <div id="filterLanguageOptions"></div>
-                    </div>
-                    <div>
-                        <label for="groupBySelect" class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Group by</label>
-                        <select id="groupBySelect" onchange="saveGroupingPreferencesAndRender()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="platform" selected>📺 Platform</option><option value="language">🌐 Language</option><option value="genre">🎭 Genre</option><option value="type">🎬 Movies vs TV</option><option value="none">📋 No Grouping</option></select>
-                    </div>
-                    <label class="flex items-center gap-2 self-end pb-2 text-xs text-slate-600 dark:text-slate-300"><input id="tuckWatchedToggle" type="checkbox" checked onchange="saveGroupingPreferencesAndRender()" class="accent-sky-500">Tuck Watched at bottom</label>
-                    <div>
-                        <label class="block text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1">Sort By</label>
-                        <select id="sortBy" onchange="renderWatchlist()" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded p-2 text-xs"><option value="default">Default</option><option value="rating-desc">⭐ Highest Rating</option><option value="title-asc">Title (A-Z)</option><option value="title-desc">Title (Z-A)</option></select>
+                <div id="filterDrawer" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="filterSheetTitle">
+                    <button type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close filters" onclick="toggleFilterDrawer()"></button>
+                    <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
+                        <div class="mb-4 flex items-center justify-between">
+                            <h2 id="filterSheetTitle" class="text-lg font-extrabold">Filter &amp; Sort</h2>
+                            <button type="button" aria-label="Close filters" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onclick="toggleFilterDrawer()">✕</button>
+                        </div>
+                        <div class="grid gap-5 sm:grid-cols-2">
+                            <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Types</label><div id="filterTypeOptions"></div></div>
+                            <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platforms</label><div id="filterPlatformOptions"></div></div>
+                            <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genres</label><div id="filterGenreOptions"></div></div>
+                            <div><label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Languages</label><div id="filterLanguageOptions"></div></div>
+                            <div>
+                                <label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Group By</label>
+                                <input id="groupBySelect" type="hidden" value="none">
+                                <div id="groupByOptions" class="flex flex-wrap gap-2"></div>
+                            </div>
+                            <div>
+                                <label class="mb-2 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Sort By</label>
+                                <input id="sortBy" type="hidden" value="default">
+                                <div id="sortByOptions" class="flex flex-wrap gap-2"></div>
+                            </div>
+                        </div>
+                        <label class="mt-4 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input id="tuckWatchedToggle" type="checkbox" checked onchange="saveGroupingPreferencesAndRender()" class="accent-sky-500">Tuck Watched at bottom</label>
+                        <div class="mt-5 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                            <button type="button" onclick="clearAllLibraryFilters()" class="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Clear All</button>
+                            <button type="button" onclick="toggleFilterDrawer()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white">Done</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -147,68 +164,80 @@
             <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
                 <h2 class="mb-3 text-lg font-bold">Smart Title Search</h2>
                 <div class="flex flex-col gap-2 sm:flex-row">
-                    <input id="candidateSearchInput" type="search" placeholder="Search movies and TV shows..." class="flex-1 rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm">
+                    <div class="relative min-w-0 flex-1">
+                        <input id="candidateSearchInput" type="text" placeholder="Search movies and TV shows..." class="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 pr-20 text-sm">
+                        <span id="candidateSearchSpinner" class="hidden absolute right-10 top-1/2 -translate-y-1/2 animate-spin text-sky-500" aria-label="Searching">◌</span>
+                        <button id="clearCandidateSearchBtn" type="button" aria-label="Clear title search" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">✕</button>
+                    </div>
                     <button id="candidateSearchBtn" type="button" class="rounded-lg bg-sky-500 px-5 py-2 text-sm font-bold text-white hover:bg-sky-600">Search</button>
-                    <button id="clearCandidateSearchBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-bold hover:border-sky-400">✕ Clear</button>
+                    <button id="openBulkUploadBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm font-bold hover:border-sky-400">📋 Paste List / Caption</button>
                 </div>
                 <div id="candidateResults" class="mt-4 space-y-3" aria-live="polite"></div>
             </div>
 
             <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-                <details id="trendingPanel">
+                <details id="trendingPanel" open>
                     <summary class="cursor-pointer text-sm font-bold text-slate-800 dark:text-slate-100">🔥 Trending &amp; Discover in India</summary>
                     <div class="mt-4 space-y-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-end">
-                            <div>
-                                <label for="trendingType" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Type</label>
-                                <select id="trendingType" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Genre</label><div id="trendingGenreOptions"></div>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Language</label><div id="trendingLanguageOptions"></div>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Platform</label><div id="trendingPlatformOptions"></div>
-                            </div>
-                            <div>
-                                <label for="trendingFreshness" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Freshness</label>
-                                <select id="trendingFreshness" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
-                            </div>
-                            <div>
-                                <label for="trendingSort" class="mb-1 block text-[10px] uppercase text-slate-500 dark:text-slate-400">Sort</label>
-                                <select id="trendingSort" onchange="resetTrendingDiscover()" class="w-full rounded border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-xs"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
-                            </div>
-                            <button id="loadTrendingBtn" type="button" onclick="resetTrendingDiscover()" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600">Discover</button>
+                        <div id="discoverPresets" class="flex gap-2 overflow-x-auto pb-1">
+                            <button type="button" data-discover-preset="fresh" class="quick-filter-pill">🔥 Fresh on OTT</button>
+                            <button type="button" data-discover-preset="profile" class="quick-filter-pill">✨ My Profile</button>
+                            <button type="button" data-discover-preset="hindi" class="quick-filter-pill">🎬 Hindi Movies</button>
+                            <button type="button" data-discover-preset="korean" class="quick-filter-pill">🇰🇷 Korean</button>
+                            <button type="button" data-discover-preset="netflix" class="quick-filter-pill">🍿 Netflix</button>
+                            <button type="button" data-discover-preset="prime" class="quick-filter-pill">⚡ Prime Video</button>
+                            <button type="button" data-discover-preset="comedy" class="quick-filter-pill">🎭 Comedy</button>
+                            <button id="openTrendingFiltersBtn" type="button" class="quick-filter-pill">🎛️ Custom Filters</button>
                         </div>
+                        <select id="trendingType" class="hidden"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
+                        <select id="trendingFreshness" class="hidden"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
+                        <select id="trendingSort" class="hidden"><option value="popularity" selected>Trending / Popular</option><option value="newest">Newest First</option></select>
+                        <button id="loadTrendingBtn" type="button" onclick="resetTrendingDiscover()" class="hidden">Discover</button>
                         <div id="trendingShelf" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3" aria-live="polite"></div>
                         <button id="loadMoreTrendingBtn" type="button" onclick="loadMoreTrending()" class="hidden mx-auto rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold hover:border-sky-400">Load More</button>
                     </div>
                 </details>
             </div>
-
-            <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
-                <details>
-                    <summary id="bulkUploadToggle" class="cursor-pointer text-sm font-bold text-slate-700 dark:text-slate-300">Bulk Upload</summary>
-                    <div class="mt-3 space-y-3">
-                        <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line, or paste a messy social media caption or list.</label>
-                        <textarea id="bulkTitles" rows="4" placeholder="Inception&#10;The Matrix&#10;Sacred Games&#10;&#10;Or paste an Instagram, YouTube, WhatsApp, or Reddit caption..." class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
-                        <div class="flex flex-wrap gap-2">
-                            <button id="bulkUploadButton" onclick="bulkUploadItems()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Upload Titles</button>
-                            <button id="extractTitlesBtn" type="button" onclick="handleExtractSocialTitles()" class="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 px-4 py-2 text-sm font-bold text-sky-700 dark:text-sky-300 hover:border-sky-500">✨ Extract Titles</button>
-                        </div>
-                        <div id="bulkProgressContainer" class="hidden space-y-1" aria-live="polite">
-                            <div class="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                                <div id="bulkProgressBar" class="h-full w-0 bg-sky-500 transition-all duration-200"></div>
-                            </div>
-                            <p id="bulkStatusText" class="text-xs text-slate-500 dark:text-slate-400"></p>
-                        </div>
-                    </div>
-                </details>
-                <div id="bulkReviewContainer" class="mt-4 hidden space-y-3" aria-live="polite"></div>
-            </div>
         </section>
+
+        <div id="trendingFiltersModal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="trendingFiltersTitle">
+            <button id="closeTrendingFiltersBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close discovery filters"></button>
+            <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
+                <div class="mb-4 flex items-center justify-between"><h2 id="trendingFiltersTitle" class="text-lg font-extrabold">🎛️ Discover Filters</h2><button id="closeTrendingFiltersBtn" type="button" aria-label="Close discovery filters" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
+                <div class="grid gap-5 sm:grid-cols-2">
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Type</p><div id="trendingTypeOptions" class="flex flex-wrap gap-2"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Platform</p><div id="trendingPlatformOptions" class="flex flex-wrap gap-2"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Genre</p><div id="trendingGenreOptions" class="flex flex-wrap gap-2"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Language</p><div id="trendingLanguageOptions" class="flex flex-wrap gap-2"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Freshness</p><div id="trendingFreshnessOptions" class="flex flex-wrap gap-2"></div></div>
+                    <div><p class="mb-2 text-[10px] font-bold uppercase text-slate-500">Sort</p><div id="trendingSortOptions" class="flex flex-wrap gap-2"></div></div>
+                </div>
+                <div class="mt-5 flex justify-end"><button id="doneTrendingFiltersBtn" type="button" class="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-white">Done</button></div>
+            </div>
+        </div>
+
+        <div id="bulkUploadModal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="bulkUploadTitle">
+            <button id="closeBulkUploadBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close paste list"></button>
+            <div class="relative z-10 mt-auto max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl md:my-auto md:max-w-2xl md:rounded-2xl">
+                <div class="flex items-center justify-between gap-3">
+                    <h2 id="bulkUploadTitle" class="text-lg font-extrabold">📋 Paste List / Caption</h2>
+                    <button id="closeBulkUploadBtn" type="button" aria-label="Close paste list" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+                </div>
+                <div class="mt-3 space-y-3">
+                    <label for="bulkTitles" class="block text-xs text-slate-500 dark:text-slate-400">Enter one title per line, or paste a messy social media caption or list.</label>
+                    <textarea id="bulkTitles" rows="5" placeholder="Inception&#10;The Matrix&#10;Sacred Games&#10;&#10;Or paste an Instagram, YouTube, WhatsApp, or Reddit caption..." class="w-full rounded-lg border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm"></textarea>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="bulkUploadButton" type="button" onclick="bulkUploadItems()" class="rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600">Upload Titles</button>
+                        <button id="extractTitlesBtn" type="button" onclick="handleExtractSocialTitles()" class="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 px-4 py-2 text-sm font-bold text-sky-700 dark:text-sky-300 hover:border-sky-500">✨ Extract Titles</button>
+                    </div>
+                    <div id="bulkProgressContainer" class="hidden space-y-1" aria-live="polite">
+                        <div class="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div id="bulkProgressBar" class="h-full w-0 bg-sky-500 transition-all duration-200"></div></div>
+                        <p id="bulkStatusText" class="text-xs text-slate-500 dark:text-slate-400"></p>
+                    </div>
+                    <div id="bulkReviewContainer" class="hidden space-y-3" aria-live="polite"></div>
+                </div>
+            </div>
+        </div>
 
         <div id="sharedListModal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListTitle">
             <div class="my-auto w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
@@ -236,6 +265,17 @@
             </div>
         </div>
 
+        <div id="sharedListConfirmModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="sharedListConfirmTitle">
+            <div class="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">
+                <h2 id="sharedListConfirmTitle" class="text-lg font-extrabold"></h2>
+                <p id="sharedListConfirmMessage" class="mt-2 text-sm text-slate-500 dark:text-slate-400"></p>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button id="cancelSharedListActionBtn" type="button" class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold">Cancel</button>
+                    <button id="confirmSharedListActionBtn" type="button" class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white">Confirm</button>
+                </div>
+            </div>
+        </div>
+
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
@@ -247,7 +287,31 @@
                 </ul>
             </details>
         </footer>
+        <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 z-40 grid grid-cols-3 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 shadow-lg backdrop-blur" aria-label="Mobile navigation">
+            <button id="mobileNavLibraryBtn" type="button" onclick="switchView('library')" class="rounded-xl px-2 py-2 text-xs font-bold">📚 Library</button>
+            <button id="mobileNavAddBtn" type="button" onclick="switchView('add')" class="rounded-xl px-2 py-2 text-xs font-bold">➕ Add</button>
+            <button id="mobileNavSharedBtn" type="button" class="rounded-xl px-2 py-2 text-xs font-bold">👥 Shared</button>
+        </nav>
     </div>
+
+    <div id="detailPreviewModal" class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="detailPreviewTitle">
+        <button id="closeDetailPreviewBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close title preview"></button>
+        <div class="relative z-10 mt-auto max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl md:my-auto md:max-w-xl md:rounded-2xl">
+            <div class="flex items-center justify-between p-4"><h2 class="text-sm font-bold">Title Preview</h2><button id="closeDetailPreviewBtn" type="button" aria-label="Close preview" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
+            <div class="grid gap-4 px-4 pb-4 sm:grid-cols-[10rem_1fr]">
+                <img id="detailPreviewPoster" alt="" class="hidden aspect-[2/3] w-full rounded-xl object-cover">
+                <div id="detailPreviewPosterFallback" class="hidden aspect-[2/3] w-full items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 text-4xl">🎬</div>
+                <div class="min-w-0">
+                    <h3 id="detailPreviewTitle" class="text-xl font-extrabold"></h3>
+                    <p id="detailPreviewMeta" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
+                    <p id="detailPreviewPlatforms" class="mt-3 text-xs font-semibold text-sky-700 dark:text-sky-300"></p>
+                    <p id="detailPreviewOverview" class="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
+                    <button id="detailPreviewActionBtn" type="button" class="mt-5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toastContainer" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite" aria-atomic="false"></div>
 
     <div id="profileModal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
         <div class="my-auto w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-2xl">

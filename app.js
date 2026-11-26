@@ -23,7 +23,7 @@ function buildTMDBUrl(endpointPath, queryParams = {}) {
         const message = 'TMDB proxy is not configured. Deploy worker.js and set tmdbProxyUrl in config.js.';
         console.error(message);
         if (!tmdbProxyAlertShown) {
-            alert(message);
+            showToast(message, 'error');
             tmdbProxyAlertShown = true;
         }
         throw new Error(message);
@@ -84,6 +84,11 @@ let tourStartingView = null;
 let currentViewName = 'library';
 let bulkReviewItems = [];
 let bulkUploadCounts = { added: 0, skipped: 0, notFound: 0, processed: 0, total: 0, failures: 0 };
+let candidateSearchDebounce = null;
+let candidateSearchToken = 0;
+let activePreviewItem = null;
+let activePreviewSaved = false;
+let pendingSharedListActionId = null;
 let isManageMode = false;
 let onlyWatchableNow = false;
 let pendingWatchableActivation = false;
@@ -107,12 +112,12 @@ const TRENDING_GENRE_IDS = {
 };
 
 const WATCHLIST_TOUR_STEPS = [
-    { selector: '#navLibraryBtn', title: 'My Library', description: 'Your saved movies and shows live in your personal library.' },
+    { selector: '#libraryQuickFilters', title: 'My Library', description: 'Filter saved movies and shows from your library.' },
     { selector: '#filterDrawer', title: 'Filter your library', description: 'Filter, sort, or group your saved titles. On a phone, the filter drawer opens for this step.' },
-    { selector: '#groupBySelect', title: 'Group your titles', description: 'Choose how to arrange titles into collapsible sections.' },
-    { selector: '#navAddBtn', title: 'Add Titles', description: 'Open Add Titles to search TMDB and add a specific movie or show.' },
+    { selector: '#groupByOptions', title: 'Group your titles', description: 'Choose how to arrange titles into collapsible sections.' },
+    { selector: '#discoverPresets', title: 'Add Titles', description: 'Search TMDB or choose a one-tap India discovery preset.' },
     { selector: '#candidateSearchInput', title: 'Smart Title Search', description: 'Search once and pick the correct movie or TV show from the best matches.' },
-    { selector: '#bulkUploadToggle', title: 'Bulk Upload', description: 'Add several titles at once by entering one title per line.' }
+    { selector: '#openBulkUploadBtn', title: 'Bulk Upload', description: 'Paste a list or caption to add several titles at once.' }
 ];
 
 // ==========================================
@@ -136,15 +141,34 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('candidateSearchBtn')?.addEventListener('click', searchCandidateInput);
     document.getElementById('clearCandidateSearchBtn')?.addEventListener('click', clearCandidateSearch);
     document.getElementById('candidateSearchInput')?.addEventListener('input', event => {
-        if (!event.target.value) document.getElementById('candidateResults').innerHTML = '';
+        if (!event.target.value.trim()) {
+            candidateSearchToken += 1;
+            clearTimeout(candidateSearchDebounce);
+            document.getElementById('candidateResults').replaceChildren();
+            document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
+            document.getElementById('candidateSearchBtn')?.removeAttribute('disabled');
+            return;
+        }
+        candidateSearchToken += 1;
+        clearTimeout(candidateSearchDebounce);
+        document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
+        document.getElementById('candidateSearchBtn')?.removeAttribute('disabled');
+        candidateSearchDebounce = window.setTimeout(searchCandidateInput, 450);
     });
     document.getElementById('clearLibrarySearchBtn')?.addEventListener('click', clearLibrarySearch);
     document.getElementById('candidateSearchInput')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
+            clearTimeout(candidateSearchDebounce);
             searchCandidateInput();
         }
     });
+    document.getElementById('openBulkUploadBtn')?.addEventListener('click', openBulkUploadModal);
+    ['closeBulkUploadBtn', 'closeBulkUploadBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeBulkUploadModal));
+    document.getElementById('openTrendingFiltersBtn')?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.remove('hidden'));
+    ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.add('hidden')));
+    document.querySelectorAll('[data-discover-preset]').forEach(button => button.addEventListener('click', () => applyDiscoverPreset(button.dataset.discoverPreset)));
+    document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
     document.getElementById('openProfileBtn')?.addEventListener('click', openProfileModal);
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
     document.getElementById('saveProfileBtn')?.addEventListener('click', saveUserProfile);
@@ -159,16 +183,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('sharedListModal')?.addEventListener('click', event => {
         if (event.target.id === 'sharedListModal') event.currentTarget.classList.add('hidden');
     });
+    document.getElementById('cancelSharedListActionBtn')?.addEventListener('click', closeSharedListConfirmModal);
+    document.getElementById('confirmSharedListActionBtn')?.addEventListener('click', confirmLeaveOrDeleteSharedList);
     document.getElementById('activeListSelect')?.addEventListener('change', event => switchActiveList(event.target.value));
     document.getElementById('createSharedListBtn')?.addEventListener('click', createSharedList);
     document.getElementById('joinSharedListBtn')?.addEventListener('click', () => joinSharedList(document.getElementById('joinInviteCodeInput')?.value));
     document.getElementById('copySharedListCodeBtn')?.addEventListener('click', () => copyActiveSharedListValue('code'));
     document.getElementById('copySharedListLinkBtn')?.addEventListener('click', () => copyActiveSharedListValue('link'));
+    document.getElementById('mobileNavSharedBtn')?.addEventListener('click', () => document.getElementById('sharedListModal')?.classList.remove('hidden'));
+    ['closeDetailPreviewBtn', 'closeDetailPreviewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeDetailPreview));
+    document.getElementById('detailPreviewActionBtn')?.addEventListener('click', handleDetailPreviewAction);
+    document.getElementById('filterDrawer')?.addEventListener('keydown', event => {
+        if (event.key === 'Escape') toggleFilterDrawer();
+    });
     document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
         if (event.currentTarget.open) resetTrendingDiscover();
     });
     initLibraryPreferences();
     initMultiSelectFilters();
+    initDiscoverPresets();
+    syncQuickFilterPills();
     updateWatchableNowButton();
     switchView('library');
     window.addEventListener('resize', positionTourTooltip);
@@ -243,12 +277,9 @@ function showWatchlistTourStep() {
     else if (tourTarget.id === 'navAddBtn') switchView('add');
     else if (targetView) switchView(targetView.id === 'addView' ? 'add' : 'library');
 
-    if (step.selector === '#bulkUploadToggle') {
-        const panel = tourTarget.closest('details');
-        if (panel && !panel.open) {
-            tourOpenedBulkPanel = true;
-            panel.open = true;
-        }
+    if (step.selector === '#openBulkUploadBtn') {
+        tourOpenedBulkPanel = document.getElementById('bulkUploadModal')?.classList.contains('hidden') || false;
+        document.getElementById('bulkUploadModal')?.classList.remove('hidden');
     }
 
     tourOriginalStyles = {
@@ -263,10 +294,10 @@ function showWatchlistTourStep() {
     tourTarget.style.zIndex = '40';
 
     const filterDrawer = document.getElementById('filterDrawer');
-    if ((step.selector === '#filterDrawer' || tourTarget.id === 'groupBySelect') && filterDrawer?.classList.contains('hidden')) {
+    if ((step.selector === '#filterDrawer' || tourTarget.id === 'groupByOptions') && filterDrawer?.classList.contains('hidden')) {
         tourOpenedFilterDrawer = true;
         filterDrawer.classList.remove('hidden');
-        filterDrawer.classList.add('grid');
+        filterDrawer.classList.add('flex');
     }
 
     document.getElementById('tourStepCount').textContent = `Step ${activeTourStep + 1} of ${WATCHLIST_TOUR_STEPS.length}`;
@@ -317,13 +348,11 @@ function endWatchlistTour() {
         tooltip.style.top = '';
     }
     if (tourOpenedBulkPanel) {
-        const panel = document.getElementById('bulkUploadToggle')?.closest('details');
-        if (panel) panel.open = false;
+        document.getElementById('bulkUploadModal')?.classList.add('hidden');
     }
     if (tourOpenedFilterDrawer) {
         const drawer = document.getElementById('filterDrawer');
         drawer?.classList.add('hidden');
-        drawer?.classList.remove('grid');
     }
     if (tourStartingView) switchView(tourStartingView);
 
@@ -343,7 +372,7 @@ function switchView(viewName) {
 
     const activeClasses = ['bg-sky-500', 'text-white', 'border-sky-500'];
     const inactiveClasses = ['bg-white', 'dark:bg-slate-900', 'text-slate-700', 'dark:text-slate-200', 'border-slate-300', 'dark:border-slate-800', 'hover:border-sky-400'];
-    [['navLibraryBtn', 'library'], ['navAddBtn', 'add']].forEach(([buttonId, buttonView]) => {
+    [['navLibraryBtn', 'library'], ['navAddBtn', 'add'], ['mobileNavLibraryBtn', 'library'], ['mobileNavAddBtn', 'add']].forEach(([buttonId, buttonView]) => {
         const button = document.getElementById(buttonId);
         if (!button) return;
         button.classList.remove(...activeClasses, ...inactiveClasses);
@@ -353,15 +382,16 @@ function switchView(viewName) {
 
     const nextHash = viewName === 'library' ? '#library' : '#add';
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
+    if (viewName === 'add' && document.getElementById('trendingPanel')?.open) resetTrendingDiscover();
 }
 
-// Load the saved grouping and watched-title display choices.
+// Load grouping defaults and build the Group By and Sort By chips.
 function initLibraryPreferences() {
     const groupBy = document.getElementById('groupBySelect');
     const tuckWatched = document.getElementById('tuckWatchedToggle');
     if (!groupBy || !tuckWatched) return;
 
-    let savedGroupBy = 'platform';
+    let savedGroupBy = 'none';
     let savedTuckWatched = true;
     try {
         savedGroupBy = localStorage.getItem('watchlist_group_by') || savedGroupBy;
@@ -371,7 +401,25 @@ function initLibraryPreferences() {
         console.warn('Could not load saved grouping preferences.', error);
     }
 
-    groupBy.value = [...groupBy.options].some(option => option.value === savedGroupBy) ? savedGroupBy : 'platform';
+    const groupOptions = [
+        { value: 'platform', label: '📺 Platform' }, { value: 'language', label: '🌐 Language' },
+        { value: 'genre', label: '🎭 Genre' }, { value: 'type', label: '🎬 Movies vs TV' }, { value: 'none', label: '📋 No Grouping' }
+    ];
+    const sortOptions = [
+        { value: 'default', label: 'Default' }, { value: 'rating-desc', label: '⭐ Rating' },
+        { value: 'title-asc', label: 'Title A–Z' }, { value: 'title-desc', label: 'Title Z–A' }
+    ];
+    savedGroupBy = groupOptions.some(option => option.value === savedGroupBy) ? savedGroupBy : 'none';
+    try {
+        localStorage.setItem('watchlist_group_by', savedGroupBy);
+        localStorage.setItem('watchlist_tuck_watched', String(savedTuckWatched));
+    } catch (error) {
+        console.warn('Could not save default grouping preferences.', error);
+    }
+    renderSingleSelectPills('groupByOptions', 'groupBySelect', groupOptions, savedGroupBy, saveGroupingPreferencesAndRender);
+    const sortInput = document.getElementById('sortBy');
+    const savedSort = sortOptions.some(option => option.value === sortInput.value) ? sortInput.value : 'default';
+    renderSingleSelectPills('sortByOptions', 'sortBy', sortOptions, savedSort, renderWatchlist);
     tuckWatched.checked = savedTuckWatched;
 }
 
@@ -406,10 +454,14 @@ function toggleSearchPanel() {
 
 // Clear the title search and any candidate results.
 function clearCandidateSearch() {
+    candidateSearchToken += 1;
+    clearTimeout(candidateSearchDebounce);
     const input = document.getElementById('candidateSearchInput');
     const results = document.getElementById('candidateResults');
     if (input) input.value = '';
     if (results) results.innerHTML = '';
+    document.getElementById('candidateSearchSpinner')?.classList.add('hidden');
+    document.getElementById('candidateSearchBtn')?.removeAttribute('disabled');
 }
 
 // Clear the library search filter.
@@ -419,14 +471,102 @@ function clearLibrarySearch() {
     renderWatchlist();
 }
 
+// Draw reusable tappable chips for a single-choice filter.
+function renderSingleSelectPills(containerId, inputId, options, selectedValue, onChange) {
+    const container = document.getElementById(containerId);
+    const valueInput = document.getElementById(inputId);
+    if (!container || !valueInput) return;
+    valueInput.value = selectedValue;
+    container.replaceChildren();
+    options.forEach(option => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.value = option.value;
+        button.className = `option-chip${option.value === selectedValue ? ' active' : ''}`;
+        button.textContent = option.label;
+        button.setAttribute('aria-pressed', String(option.value === selectedValue));
+        button.addEventListener('click', () => {
+            valueInput.value = option.value;
+            container.querySelectorAll('.option-chip').forEach(chip => {
+                const active = chip === button;
+                chip.classList.toggle('active', active);
+                chip.setAttribute('aria-pressed', String(active));
+            });
+            onChange();
+        });
+        container.appendChild(button);
+    });
+}
+
+// Select a single chip and keep its hidden query value synchronized.
+function setSinglePillSelection(containerId, inputId, value) {
+    const input = document.getElementById(inputId);
+    if (input) input.value = value;
+    document.querySelectorAll(`#${containerId} .option-chip`).forEach(chip => {
+        const active = chip.dataset.value === value;
+        chip.classList.toggle('active', active);
+        chip.setAttribute('aria-pressed', String(active));
+    });
+}
+
+// Toggle the responsive Filter & Sort sheet.
 function toggleFilterDrawer() {
     const drawer = document.getElementById('filterDrawer');
     const button = document.getElementById('toggleFilterDrawerBtn');
     if (!drawer) return;
     const isOpening = drawer.classList.contains('hidden');
     drawer.classList.toggle('hidden', !isOpening);
-    drawer.classList.toggle('grid', isOpening);
     if (button) button.setAttribute('aria-expanded', String(isOpening));
+}
+
+// Reset library chips, grouping, sorting, and search to their defaults.
+function clearAllLibraryFilters() {
+    ['type', 'platform', 'genre', 'language'].forEach(name => setMultiFilterValues('library', name, []));
+    setSinglePillSelection('groupByOptions', 'groupBySelect', 'none');
+    setSinglePillSelection('sortByOptions', 'sortBy', 'default');
+    const tuckWatched = document.getElementById('tuckWatchedToggle');
+    if (tuckWatched) tuckWatched.checked = true;
+    const search = document.getElementById('searchQuery');
+    if (search) search.value = '';
+    onlyWatchableNow = false;
+    updateWatchableNowButton();
+    saveGroupingPreferencesAndRender();
+}
+
+// Open the paste-list dialog without navigating away from Add Titles.
+function openBulkUploadModal() {
+    document.getElementById('bulkUploadModal')?.classList.remove('hidden');
+    document.getElementById('bulkTitles')?.focus();
+}
+
+// Close the paste-list dialog.
+function closeBulkUploadModal() {
+    document.getElementById('bulkUploadModal')?.classList.add('hidden');
+}
+
+// Apply a one-tap Discover preset and refresh India results.
+function applyDiscoverPreset(preset) {
+    ['genre', 'language', 'platform'].forEach(name => setMultiFilterValues('trending', name, []));
+    setSinglePillSelection('trendingTypeOptions', 'trendingType', 'All');
+    setSinglePillSelection('trendingFreshnessOptions', 'trendingFreshness', '6m');
+    setSinglePillSelection('trendingSortOptions', 'trendingSort', 'popularity');
+    if (preset === 'profile') {
+        setMultiFilterValues('trending', 'platform', ['my_subs']);
+        setMultiFilterValues('trending', 'language', ['my_langs']);
+    } else if (preset === 'hindi') {
+        setSinglePillSelection('trendingTypeOptions', 'trendingType', 'movie');
+        setMultiFilterValues('trending', 'language', ['hi']);
+    } else if (preset === 'korean') {
+        setMultiFilterValues('trending', 'language', ['ko']);
+    } else if (preset === 'netflix') {
+        setMultiFilterValues('trending', 'platform', ['Netflix']);
+    } else if (preset === 'prime') {
+        setMultiFilterValues('trending', 'platform', ['Prime Video']);
+    } else if (preset === 'comedy') {
+        setMultiFilterValues('trending', 'genre', ['Comedy']);
+    }
+    document.querySelectorAll('[data-discover-preset]').forEach(button => button.classList.toggle('active', button.dataset.discoverPreset === preset));
+    resetTrendingDiscover();
 }
 
 function toggleManageMode() {
@@ -714,13 +854,27 @@ async function joinSharedList(code) {
     }
 }
 
-// Leave a shared list, or remove an owned list and its saved titles.
-async function leaveOrDeleteSharedList(listId) {
+// Ask before leaving a shared list or deleting one you own.
+function leaveOrDeleteSharedList(listId) {
     const list = userSharedLists.find(item => item.id === listId);
     if (!db || !currentUser || !list) return;
     const isOwner = list.ownerId === currentUser.uid;
-    const action = isOwner ? 'Delete this shared list and all its titles?' : 'Leave this shared list?';
-    if (!confirm(`${action} This cannot be undone.`)) return;
+    pendingSharedListActionId = listId;
+    document.getElementById('sharedListConfirmTitle').textContent = isOwner ? 'Delete shared list?' : 'Leave shared list?';
+    document.getElementById('sharedListConfirmMessage').textContent = isOwner
+        ? 'This removes the list and all its titles. This cannot be undone.'
+        : 'You will no longer see this shared list. You can join again with its invite code.';
+    document.getElementById('confirmSharedListActionBtn').textContent = isOwner ? 'Delete List' : 'Leave List';
+    document.getElementById('sharedListConfirmModal')?.classList.remove('hidden');
+}
+
+// Carry out the confirmed shared-list action using the existing membership rules.
+async function confirmLeaveOrDeleteSharedList() {
+    const listId = pendingSharedListActionId;
+    const list = userSharedLists.find(item => item.id === listId);
+    if (!db || !currentUser || !list) return closeSharedListConfirmModal();
+    const isOwner = list.ownerId === currentUser.uid;
+    closeSharedListConfirmModal();
     try {
         if (isOwner) {
             const snapshot = await db.collection('watchlist').where('listId', '==', listId).get();
@@ -741,6 +895,12 @@ async function leaveOrDeleteSharedList(listId) {
         const status = document.getElementById('sharedListsStatus');
         if (status) status.textContent = 'Could not update this list. Check your Firestore access rules.';
     }
+}
+
+// Close the shared-list confirmation dialog without changing membership.
+function closeSharedListConfirmModal() {
+    pendingSharedListActionId = null;
+    document.getElementById('sharedListConfirmModal')?.classList.add('hidden');
 }
 
 // Switch the library and add destination to the selected list.
@@ -788,8 +948,9 @@ async function copyActiveSharedListValue(kind) {
         : list.inviteCode || '';
     try {
         await navigator.clipboard.writeText(value);
+        showToast(kind === 'link' ? 'Invite link copied.' : 'Invite code copied.');
     } catch (error) {
-        window.prompt(kind === 'link' ? 'Copy invite link:' : 'Copy invite code:', value);
+        showToast('Clipboard access is unavailable in this browser.', 'error');
     }
 }
 
@@ -827,9 +988,9 @@ function renderSharedLists() {
             const link = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(list.inviteCode || '')}`;
             try {
                 await navigator.clipboard.writeText(link);
-                document.getElementById('sharedListsStatus').textContent = 'Invite link copied.';
+                showToast('Invite link copied.');
             } catch (error) {
-                document.getElementById('sharedListsStatus').textContent = `Copy this invite link: ${link}`;
+                showToast('Clipboard access is unavailable in this browser.', 'error');
             }
         });
         const leave = document.createElement('button');
@@ -902,6 +1063,26 @@ function getGroupKey(item, groupBy) {
 // ==========================================
 // 3. Theme Switcher & UI Helpers
 // ==========================================
+// Show a brief success, info, or error message without blocking the screen.
+function showToast(message, variant = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    const variantClasses = {
+        success: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+        error: 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200',
+        info: 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200'
+    };
+    toast.className = `rounded-xl border px-4 py-3 text-sm font-semibold shadow-xl ${variantClasses[variant] || variantClasses.success}`;
+    toast.setAttribute('role', 'status');
+    toast.textContent = message;
+    container.appendChild(toast);
+    window.setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2', 'transition-all');
+        window.setTimeout(() => toast.remove(), 250);
+    }, 3200);
+}
+
 function initTheme() {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'light') {
@@ -942,6 +1123,55 @@ function getPlatformBadgeClass(platform) {
 function getMultiFilterValues(scope, name) {
     return [...document.querySelectorAll(`[data-multi-scope="${scope}"][data-multi-name="${name}"]:checked`)]
         .map(input => input.value);
+}
+
+// Build tappable multi-select chips and keep their checked state readable.
+function renderPillFilterGroup(containerId, scope, name, options, selectedValues = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const normalizedOptions = [...options];
+    selectedValues.forEach(value => {
+        if (!normalizedOptions.some(option => option.value === value)) normalizedOptions.push({ value, label: value });
+    });
+    container.replaceChildren();
+    normalizedOptions.forEach(option => {
+        const label = document.createElement('label');
+        label.className = `option-chip cursor-pointer${selectedValues.includes(option.value) ? ' active' : ''}`;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = option.value;
+        input.checked = selectedValues.includes(option.value);
+        input.dataset.multiScope = scope;
+        input.dataset.multiName = name;
+        input.className = 'sr-only';
+        input.addEventListener('change', () => {
+            label.classList.toggle('active', input.checked);
+            if (scope === 'library') {
+                syncQuickFilterPills();
+                renderWatchlist();
+            } else resetTrendingDiscover();
+        });
+        label.append(input, document.createTextNode(option.label));
+        container.appendChild(label);
+    });
+}
+
+// Keep the quick-filter row visually matched to its selected filter chips.
+function syncQuickFilterPills() {
+    document.querySelectorAll('[data-quick-scope][data-quick-name][data-quick-value]').forEach(button => {
+        const selected = getMultiFilterValues(button.dataset.quickScope, button.dataset.quickName).includes(button.dataset.quickValue);
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+    });
+}
+
+// Toggle a library filter from its one-tap shortcut.
+function toggleQuickFilterPill(button) {
+    const { quickScope: scope, quickName: name, quickValue: value } = button.dataset;
+    const values = getMultiFilterValues(scope, name);
+    setMultiFilterValues(scope, name, values.includes(value) ? values.filter(item => item !== value) : [...values, value]);
+    syncQuickFilterPills();
+    renderWatchlist();
 }
 
 // Filter dropdowns: update the compact summary and preserve requested selections.
@@ -1018,47 +1248,59 @@ function updateCheckboxDropdownSummary(details) {
 function setMultiFilterValues(scope, name, values) {
     document.querySelectorAll(`[data-multi-scope="${scope}"][data-multi-name="${name}"]`).forEach(input => {
         input.checked = values.includes(input.value);
+        input.parentElement?.classList.toggle('active', input.checked);
     });
     const details = document.querySelector(`[data-multi-summary="${scope}:${name}"]`)?.closest('details');
     if (details) updateCheckboxDropdownSummary(details);
+    if (scope === 'library') syncQuickFilterPills();
 }
 
-// Filter dropdowns: build checkbox menus once and keep user selections during Firestore refreshes.
+// Build default library and discovery chips, then fill library choices from saved titles.
 function initMultiSelectFilters() {
-    renderCheckboxDropdown('trendingGenreOptions', 'trending', 'genre', [
+    renderPillFilterGroup('trendingGenreOptions', 'trending', 'genre', [
         'Action', 'Comedy', 'Drama', 'Crime', 'Thriller', 'Romance', 'Sci-Fi', 'Horror', 'Animation', 'Documentary'
     ].map(value => ({ value, label: value })));
-    renderCheckboxDropdown('trendingLanguageOptions', 'trending', 'language', [
+    renderPillFilterGroup('trendingLanguageOptions', 'trending', 'language', [
         { value: 'my_langs', label: '✨ My Languages' },
         ...Object.entries({ en: 'English', hi: 'Hindi', ko: 'Korean', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada', ja: 'Japanese', es: 'Spanish', fr: 'French' })
             .map(([value, label]) => ({ value, label }))
     ]);
-    renderCheckboxDropdown('trendingPlatformOptions', 'trending', 'platform', [
+    renderPillFilterGroup('trendingPlatformOptions', 'trending', 'platform', [
         { value: 'my_subs', label: '✨ My Subscriptions' },
         ...OTT_SERVICES.map(value => ({ value, label: value }))
     ]);
+    renderSingleSelectPills('trendingTypeOptions', 'trendingType', [
+        { value: 'All', label: 'All' }, { value: 'movie', label: 'Movies' }, { value: 'tv', label: 'TV Shows' }
+    ], 'All', resetTrendingDiscover);
+    renderSingleSelectPills('trendingFreshnessOptions', 'trendingFreshness', [
+        { value: '6m', label: '🔥 Fresh on OTT' }, { value: 'all', label: 'All Time' }
+    ], '6m', resetTrendingDiscover);
+    renderSingleSelectPills('trendingSortOptions', 'trendingSort', [
+        { value: 'popularity', label: 'Trending' }, { value: 'newest', label: 'Newest' }
+    ], 'popularity', resetTrendingDiscover);
     populateFilterDropdowns();
 }
 
 function populateFilterDropdowns() {
     const items = getWatchlist();
     const genres = [...new Set(items.map(item => item.genre).filter(Boolean))].sort();
-    const languages = [...new Set(items.map(getItemLanguage))].sort((a, b) => {
+    const languages = [...new Set([...items.map(getItemLanguage), 'Hindi', 'English', 'Korean'])].sort((a, b) => {
         if (a === 'Unknown Language') return 1;
         if (b === 'Unknown Language') return -1;
         return a.localeCompare(b);
     });
-    const platforms = [...new Set(items.flatMap(item => item.platforms || [item.platform]).filter(Boolean).map(normalizePlatformName))].sort();
+    const platforms = [...new Set([...items.flatMap(item => item.platforms || [item.platform]).filter(Boolean).map(normalizePlatformName), ...OTT_SERVICES])].sort();
     const selectedTypes = getMultiFilterValues('library', 'type');
     const selectedGenres = getMultiFilterValues('library', 'genre');
     const selectedLanguages = getMultiFilterValues('library', 'language');
     const selectedPlatforms = getMultiFilterValues('library', 'platform');
-    renderCheckboxDropdown('filterTypeOptions', 'library', 'type', [
+    renderPillFilterGroup('filterTypeOptions', 'library', 'type', [
         { value: 'movie', label: 'Movies' }, { value: 'tv', label: 'TV Shows' }
     ], selectedTypes);
-    renderCheckboxDropdown('filterGenreOptions', 'library', 'genre', genres.map(value => ({ value, label: value })), selectedGenres);
-    renderCheckboxDropdown('filterLanguageOptions', 'library', 'language', languages.map(value => ({ value, label: value })), selectedLanguages);
-    renderCheckboxDropdown('filterPlatformOptions', 'library', 'platform', platforms.map(value => ({ value, label: value })), selectedPlatforms);
+    renderPillFilterGroup('filterGenreOptions', 'library', 'genre', genres.map(value => ({ value, label: value })), selectedGenres);
+    renderPillFilterGroup('filterLanguageOptions', 'library', 'language', languages.map(value => ({ value, label: value })), selectedLanguages);
+    renderPillFilterGroup('filterPlatformOptions', 'library', 'platform', platforms.map(value => ({ value, label: value })), selectedPlatforms);
+    syncQuickFilterPills();
 }
 
 // ==========================================
@@ -1113,7 +1355,8 @@ async function fetchTMDBDetails(queryTitle) {
                 language: languageName, // Saves original language name
                 platform: indiaPlatforms[0] || 'Not Streaming in IN',
                 platforms: indiaPlatforms,
-                poster: posterUrl
+                poster: posterUrl,
+                overview: match.overview || ''
             };
         }
     } catch (err) {}
@@ -1151,6 +1394,7 @@ async function searchTMDBCandidates(query) {
                 language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
                 genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
                 poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+                overview: result.overview || '',
                 popularity: result.popularity || 0
             };
         });
@@ -1186,12 +1430,17 @@ function renderCandidateResults(candidates) {
             poster.src = candidate.poster;
             poster.alt = `Poster for ${candidate.title}`;
             poster.loading = 'lazy';
-            poster.className = 'h-32 w-24 rounded object-cover';
+            poster.className = 'h-40 w-28 rounded-lg object-cover cursor-pointer';
+            poster.tabIndex = 0;
+            poster.setAttribute('role', 'button');
+            poster.addEventListener('click', () => openDetailPreview(candidate));
             card.appendChild(poster);
         } else {
             const posterFallback = document.createElement('div');
             posterFallback.textContent = '🎬';
             posterFallback.className = 'flex h-32 w-24 shrink-0 items-center justify-center rounded bg-slate-200 dark:bg-slate-800 text-3xl';
+            posterFallback.classList.add('cursor-pointer');
+            posterFallback.addEventListener('click', () => openDetailPreview(candidate));
             card.appendChild(posterFallback);
         }
 
@@ -1207,7 +1456,10 @@ function renderCandidateResults(candidates) {
         const metadata = document.createElement('p');
         metadata.textContent = `${candidate.year} · ${candidate.language} · ⭐ ${candidate.rating} · ${candidate.genre}`;
         metadata.className = 'mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400';
-        info.append(title, typeBadge, metadata);
+        const synopsis = document.createElement('p');
+        synopsis.textContent = candidate.overview || '';
+        synopsis.className = 'mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400';
+        info.append(title, typeBadge, metadata, synopsis);
 
         const addButton = document.createElement('button');
         addButton.type = 'button';
@@ -1223,9 +1475,9 @@ function renderCandidateResults(candidates) {
                 if (!saved) {
                     addButton.disabled = true;
                     addButton.textContent = '✓ Already Saved';
-                }
+                } else showToast(`Added ${candidate.title}.`);
             } catch (error) {
-                alert(`Could not add title: ${error.message}`);
+                showToast(`Could not add title: ${error.message}`, 'error');
             }
         });
         details.append(info, addButton);
@@ -1239,21 +1491,34 @@ async function searchCandidateInput() {
     const button = document.getElementById('candidateSearchBtn');
     const container = document.getElementById('candidateResults');
     const query = input?.value.trim() || '';
+    const spinner = document.getElementById('candidateSearchSpinner');
+    const requestToken = ++candidateSearchToken;
     if (!container) return;
     if (!query) {
-        container.textContent = 'Enter a title to search.';
+        container.replaceChildren();
+        spinner?.classList.add('hidden');
+        if (button) button.disabled = false;
+        showToast('Enter a title to search.', 'info');
         return;
     }
 
     if (button) button.disabled = true;
+    spinner?.classList.remove('hidden');
     container.className = 'mt-4 text-sm text-slate-500 dark:text-slate-400';
     container.textContent = 'Searching TMDB...';
     try {
-        renderCandidateResults(await searchTMDBCandidates(query));
+        const candidates = await searchTMDBCandidates(query);
+        if (requestToken === candidateSearchToken) renderCandidateResults(candidates);
     } catch (error) {
-        container.textContent = `Could not search TMDB: ${error.message}`;
+        if (requestToken === candidateSearchToken) {
+            container.textContent = `Could not search TMDB: ${error.message}`;
+            showToast(`Search failed: ${error.message}`, 'error');
+        }
     } finally {
-        if (button) button.disabled = false;
+        if (requestToken === candidateSearchToken) {
+            spinner?.classList.add('hidden');
+            if (button) button.disabled = false;
+        }
     }
 }
 
@@ -1293,6 +1558,7 @@ async function saveCandidateToWatchlist(candidate, button = null) {
             rating: candidate.rating,
             language: candidate.language,
             poster: candidate.poster,
+            overview: candidate.overview || '',
             platform: providers.platform,
             platforms: providers.platforms,
             watched: false,
@@ -1311,6 +1577,72 @@ async function saveCandidateToWatchlist(candidate, button = null) {
     }
 }
 
+// Open a quick preview with title details and the right add or watched action.
+async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
+    if (!item) return;
+    document.getElementById('detailPreviewModal')?.classList.remove('hidden');
+    activePreviewItem = item;
+    activePreviewSaved = isSaved;
+    const poster = document.getElementById('detailPreviewPoster');
+    const fallback = document.getElementById('detailPreviewPosterFallback');
+    const title = document.getElementById('detailPreviewTitle');
+    const metadata = document.getElementById('detailPreviewMeta');
+    const platforms = document.getElementById('detailPreviewPlatforms');
+    const overview = document.getElementById('detailPreviewOverview');
+    const action = document.getElementById('detailPreviewActionBtn');
+    const imageUrl = item.poster || null;
+    poster.classList.toggle('hidden', !imageUrl);
+    fallback.classList.toggle('hidden', Boolean(imageUrl));
+    fallback.classList.toggle('flex', !imageUrl);
+    if (imageUrl) {
+        poster.src = imageUrl.replace('/w200/', '/w500/');
+        poster.alt = `Poster for ${item.title || 'title'}`;
+    } else poster.removeAttribute('src');
+    title.textContent = item.title || 'Untitled';
+    metadata.textContent = `${item.year || 'N/A'} · ${item.typeLabel || (item.mediaType === 'tv' || item.type === 'tv' ? '📺 TV Show' : '🎬 Movie')} · ⭐ ${item.rating || 'N/A'} · ${item.language || 'Unknown Language'}`;
+    overview.textContent = item.overview || 'No synopsis is available for this title.';
+    const availablePlatforms = item.platforms?.length ? item.platforms : (item.platform ? [item.platform] : []);
+    platforms.textContent = `🇮🇳 India OTTs: ${availablePlatforms.join(', ') || 'Not available'}`;
+    action.textContent = isSaved ? (item.watched ? '↩️ Mark To Watch' : '✓ Mark Watched') : '+ Add to Watchlist';
+    if (!item.platforms?.length && !item.platform && (item.id || item.tmdbId)) {
+        platforms.textContent = '🇮🇳 India OTTs: Loading...';
+        const mediaType = item.mediaType || item.type;
+        const providerNames = await fetchCandidateIndiaPlatforms(mediaType, item.id || item.tmdbId);
+        if (activePreviewItem === item) {
+            item.platforms = providerNames;
+            platforms.textContent = `🇮🇳 India OTTs: ${providerNames.join(', ') || 'Not available'}`;
+        }
+    }
+}
+
+// Close the title preview sheet.
+function closeDetailPreview() {
+    document.getElementById('detailPreviewModal')?.classList.add('hidden');
+    activePreviewItem = null;
+}
+
+// Add the previewed title or toggle its watched state.
+async function handleDetailPreviewAction() {
+    if (!activePreviewItem) return;
+    const action = document.getElementById('detailPreviewActionBtn');
+    if (action?.disabled) return;
+    if (action) action.disabled = true;
+    try {
+        if (activePreviewSaved && activePreviewItem.docId) {
+            await toggleWatched(activePreviewItem.docId);
+            showToast(activePreviewItem.watched ? 'Moved back to To Watch.' : 'Marked as watched.');
+        } else {
+            const saved = await saveCandidateToWatchlist(activePreviewItem);
+            showToast(saved ? 'Added to your watchlist.' : 'This title is already saved.', saved ? 'success' : 'info');
+        }
+        closeDetailPreview();
+    } catch (error) {
+        showToast(`Could not update title: ${error.message}`, 'error');
+    } finally {
+        if (action) action.disabled = false;
+    }
+}
+
 function mapTrendingResult(result, mediaType = result.media_type) {
     const languageCode = result.original_language;
     const genreId = result.genre_ids?.[0];
@@ -1322,7 +1654,8 @@ function mapTrendingResult(result, mediaType = result.media_type) {
         rating: result.vote_average ? result.vote_average.toFixed(1) : 'N/A',
         language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
         genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
-        poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+        poster: result.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : null,
+        overview: result.overview || '',
         popularity: result.popularity || 0,
         sortDate: result.release_date || result.first_air_date || ''
     };
@@ -1582,18 +1915,19 @@ function renderTrendingShelf(candidates, append = false) {
         const card = document.createElement('article');
         card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
         const posterFrame = document.createElement('div');
-        posterFrame.className = 'relative';
+        posterFrame.className = 'relative aspect-[2/3] cursor-pointer';
+        posterFrame.addEventListener('click', () => openDetailPreview(candidate));
         if (candidate.poster) {
             const poster = document.createElement('img');
             poster.src = candidate.poster;
             poster.alt = `Poster for ${candidate.title}`;
             poster.loading = 'lazy';
-            poster.className = 'h-40 w-full object-cover';
+            poster.className = 'h-full w-full object-cover';
             posterFrame.appendChild(poster);
         } else {
             const fallback = document.createElement('div');
             fallback.textContent = '🎬';
-            fallback.className = 'flex h-40 items-center justify-center bg-slate-200 dark:bg-slate-900 text-3xl';
+            fallback.className = 'flex h-full items-center justify-center bg-slate-200 dark:bg-slate-900 text-3xl';
             posterFrame.appendChild(fallback);
         }
         const platformBadge = document.createElement('span');
@@ -1617,20 +1951,25 @@ function renderTrendingShelf(candidates, append = false) {
         metadata.className = 'mt-1 text-[10px] text-slate-500 dark:text-slate-400';
         const add = document.createElement('button');
         add.type = 'button';
-        add.className = 'mt-2 w-full rounded bg-sky-500 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-sky-600 disabled:opacity-70';
+        add.className = 'absolute bottom-2 right-2 flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white shadow-lg hover:bg-sky-600 disabled:opacity-80';
         const saved = isAlreadyInWatchlist(candidate);
-        add.textContent = saved ? '✓ Saved' : '+ Add';
+        add.textContent = saved ? '✓' : '+';
+        add.setAttribute('aria-label', saved ? 'Already saved' : `Add ${candidate.title} to watchlist`);
         add.disabled = saved;
-        add.addEventListener('click', async () => {
+        add.addEventListener('click', async event => {
+            event.stopPropagation();
             try {
                 const didSave = await saveCandidateToWatchlist(candidate, add);
-                add.textContent = didSave ? '✓ Added' : '✓ Saved';
+                add.textContent = '✓';
+                add.setAttribute('aria-label', 'Saved');
                 add.disabled = true;
+                if (didSave) showToast(`Added ${candidate.title}.`);
             } catch (error) {
-                alert(`Could not add title: ${error.message}`);
+                showToast(`Could not add title: ${error.message}`, 'error');
             }
         });
-        body.append(title, type, metadata, add);
+        posterFrame.appendChild(add);
+        body.append(title, type, metadata);
         card.appendChild(body);
         shelf.appendChild(card);
     });
@@ -1686,13 +2025,14 @@ function renderBulkReviewContainer() {
                         choice.textContent = `✓ ${candidate.title} — Already Saved`;
                         return;
                     }
+                    showToast(`Added ${candidate.title}.`);
                     bulkReviewItems = bulkReviewItems.filter(item => item !== review);
                     bulkUploadCounts.added += 1;
                     renderBulkReviewContainer();
                 } catch (error) {
                     choice.disabled = false;
                     choice.textContent = `+ ${candidate.title} (${candidate.year})`;
-                    alert(`Could not add title: ${error.message}`);
+                    showToast(`Could not add title: ${error.message}`, 'error');
                 }
             });
             choices.appendChild(choice);
@@ -1714,7 +2054,7 @@ function renderWatchlist() {
     const filterGenres = getMultiFilterValues('library', 'genre');
     const filterLanguages = getMultiFilterValues('library', 'language');
     const sortBy = document.getElementById('sortBy')?.value || 'default';
-    const groupBy = document.getElementById('groupBySelect')?.value || 'platform';
+    const groupBy = document.getElementById('groupBySelect')?.value || 'none';
     const tuckWatched = document.getElementById('tuckWatchedToggle')?.checked ?? true;
 
     container.innerHTML = '';
@@ -1836,7 +2176,7 @@ function renderGroupCards(parentContainer, items) {
         
         const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
         const badgeClass = getPlatformBadgeClass(mainPlatform);
-        const posterHtml = item.poster ? `<img src="${item.poster}" class="w-full h-44 object-cover">` : `<div class="w-full h-44 bg-slate-200 dark:bg-slate-950 flex items-center justify-center text-3xl">🎬</div>`;
+        const posterHtml = item.poster ? `<img src="${item.poster}" alt="Poster for ${item.title}" tabindex="0" role="button" class="library-poster aspect-[2/3] w-full cursor-pointer object-cover">` : `<div tabindex="0" role="button" class="library-poster flex aspect-[2/3] w-full cursor-pointer items-center justify-center bg-slate-200 dark:bg-slate-950 text-3xl">🎬</div>`;
 
         const needsMetadata = !item.language || !item.rating || item.rating === 'N/A';
         const onYourOTT = itemIsOnSubscribedOTT(item);
@@ -1867,6 +2207,14 @@ function renderGroupCards(parentContainer, items) {
                 </div>
             </div>
         `;
+        const posterTrigger = card.querySelector('.library-poster');
+        posterTrigger?.addEventListener('click', () => openDetailPreview(item, true));
+        posterTrigger?.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openDetailPreview(item, true);
+            }
+        });
         if (activeListId !== 'personal') {
             const attribution = document.createElement('p');
             attribution.className = 'mt-2 text-[10px] text-slate-400 dark:text-slate-500';
@@ -1911,12 +2259,13 @@ async function refreshMetadata(docId) {
 
     const metadata = await fetchTMDBDetails(item.title);
     if (!metadata.valid) {
-        alert(metadata.error);
+        showToast(metadata.error, 'error');
         return;
     }
 
     const { valid, ...updates } = metadata;
     await db.collection('watchlist').doc(docId).update(updates);
+    showToast('Title details refreshed.');
 }
 
 // ==========================================
@@ -1987,6 +2336,7 @@ function handleExtractSocialTitles() {
     if (progressContainer) progressContainer.classList.remove('hidden');
     if (!rawText.trim()) {
         if (statusText) statusText.textContent = 'Paste a caption or list first.';
+        showToast('Paste a caption or list first.', 'info');
         return;
     }
 
@@ -1998,6 +2348,7 @@ function handleExtractSocialTitles() {
                 ? "Links can't be read directly—copy & paste the caption, description, or comment text instead."
                 : 'No titles found. Paste a caption or title list and try again.';
         }
+        showToast(containsLink ? 'Copy and paste the caption text; links cannot be read directly.' : 'No titles found in that text.', 'info');
         return;
     }
 
@@ -2022,17 +2373,20 @@ async function bulkUploadItems() {
     if (!currentUser) {
         if (statusText) statusText.textContent = 'Please sign in before uploading titles.';
         if (progressContainer) progressContainer.classList.remove('hidden');
+        showToast('Please sign in before uploading titles.', 'error');
         return;
     }
 
     if (titles.length === 0) {
         if (statusText) statusText.textContent = 'Enter at least one title to upload.';
         if (progressContainer) progressContainer.classList.remove('hidden');
+        showToast('Enter at least one title to upload.', 'info');
         return;
     }
     if (!db) {
         if (statusText) statusText.textContent = 'Firestore is not available.';
         if (progressContainer) progressContainer.classList.remove('hidden');
+        showToast('Firestore is not available.', 'error');
         return;
     }
 

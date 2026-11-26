@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.15.1**
+**Current version: v2.16.0**
 
 ## 1. Project Vision
 
@@ -18,7 +18,18 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.15.1
+## 3. Completed Features Through v2.16.0
+
+### v2.16.0 Modern Mobile & Web UX Polish
+
+- Library quick-filter pills cover movie/TV type, popular India platforms, and Hindi, English, and Korean. Filters open in a responsive bottom sheet on phones and centered modal on desktop, with tappable chips and Clear All / Done actions.
+- Group By defaults to **No Grouping**; **Tuck Watched at bottom** remains checked by default.
+- Candidate search runs after 450 ms of typing, includes inline clear and loading affordances, and still supports Enter. Add Titles now opens bulk list/caption import in `#bulkUploadModal`.
+- Replaced non-destructive browser alerts with floating `showToast` messages.
+- Discover now offers one-tap Fresh on OTT, My Profile, Hindi Movies, Korean, Netflix, Prime Video, and Comedy presets, plus a custom filter sheet.
+- Search, Discover, and Library posters open `#detailPreviewModal` with TMDB overview and India OTT details. Discover uses poster-first 2:3 cards with a circular add control.
+- Added the fixed mobile Library / Add / Shared bottom navigation and extra dashboard bottom padding.
+- New helpers and UI names: `showToast`, `openDetailPreview`, `#bulkUploadModal`, and `#detailPreviewModal`.
 
 ### v2.15.1 usability fixes
 
@@ -51,7 +62,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 - **My Library** and **Add Titles** views switch through `switchView(viewName)` and synchronize `window.location.hash`.
 - My Library has a compact Search / Filters / Manage / Watchable Now toolbar. Search, filters, and batch management are hidden until opened; card selection controls appear only in Manage mode.
-- Default grouping is **Status → Platform**, remembered in local storage. “To Watch” appears before “Watched”; watched groups start collapsed.
+- Grouping choices are remembered in local storage. Group By defaults to **No Grouping**, with **Tuck Watched at bottom** enabled so unwatched titles appear first.
 - An empty library offers a shortcut to Add Titles.
 
 ### Candidate search and smart bulk upload
@@ -114,9 +125,9 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 - Views and tour: `switchView`, `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`.
 - User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
-- Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
-- TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `renderCheckboxDropdown`, `updateCheckboxDropdownSummary`, `setMultiFilterValues`, `initMultiSelectFilters`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
+- Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `renderPillFilterGroup`, `clearAllLibraryFilters`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
+- TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`, `openDetailPreview`, `showToast`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
