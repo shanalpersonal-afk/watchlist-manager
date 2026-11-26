@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.13.0**
+**Current version: v2.14.0**
 
 ## 1. Project Vision
 
@@ -14,10 +14,17 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - **Metadata and discovery:** TMDB `/search/multi`, `/discover`, `/trending`, and `/watch/providers` endpoints.
 - **Hosting:** [GitHub Pages](https://shanalpersonal-afk.github.io/watchlist-manager/).
 - **Main files:** `index.html`, `config.js`, `app.js`, and the Cloudflare Worker reference `worker.js`. `style.css` is legacy and currently unused.
+- **Installable web app:** `manifest.json` and Apple web app metadata support standalone installation. The splash screen and dashboard footer show Save as App steps for iPhone, Android, and desktop.
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.13.0
+## 3. Completed Features Through v2.14.0
+
+### v2.14.0 installable web app
+
+- Added `manifest.json` with Watchlist Studio app identity, standalone display mode, and theme/background colors.
+- Added manifest and Apple web app metadata to `index.html`; updated the page title and dashboard version badge to v2.14.0.
+- Added collapsible Save as App instructions below Google Sign-In on the splash screen and in the dashboard footer beside the TMDB/JustWatch credit.
 
 ### Authentication and private libraries
 
@@ -82,6 +89,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 - `config.js` — `window.APP_CONFIG` Firebase configuration and the Cloudflare Worker URL; it contains no TMDB API key.
 - `worker.js` — Cloudflare Worker source/reference that keeps the TMDB API key server-side.
+- `manifest.json` — installable web app name, launch URL, standalone display mode, and colors.
 - `index.html` — splash, dashboard views, controls, discovery panel, profile preferences modal, and script loading order.
 - `app.js` — auth/listener lifecycle, candidate and discovery workflows, rendering, local preferences, and Firestore mutations.
 - `style.css` — legacy stylesheet; not loaded or used by the current app.
@@ -98,8 +106,8 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 ## 5. Remaining Next Steps
 
+- **v2.15.0:** Add an optional **Shared/Family Watchlist** toggle.
 - Add **Because You Watched** personalized recommendations.
-- Add an optional **Shared/Family Watchlist** toggle.
 - Add **JSON/CSV Export and Import** for backups and migration.
 
 These items form the remaining v3.0.0 roadmap.
