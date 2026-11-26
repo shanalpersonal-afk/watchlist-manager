@@ -64,6 +64,9 @@ const LANGUAGE_NAMES = {
 };
 
 let unsubscribeWatchlist = null;
+let activeListId = 'personal';
+let userSharedLists = [];
+let unsubscribeSharedLists = null;
 let currentWatchlistItems = [];
 let currentUser = null;
 let userProfile = { subscriptions: [], languages: [], genres: [] };
@@ -142,6 +145,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('profileModal')?.addEventListener('click', event => {
         if (event.target.id === 'profileModal') closeProfileModal();
     });
+    document.getElementById('openSharedListsBtn')?.addEventListener('click', () => {
+        document.getElementById('sharedListsStatus').textContent = '';
+        document.getElementById('sharedListModal')?.classList.remove('hidden');
+    });
+    document.getElementById('closeSharedListsBtn')?.addEventListener('click', () => document.getElementById('sharedListModal')?.classList.add('hidden'));
+    document.getElementById('sharedListModal')?.addEventListener('click', event => {
+        if (event.target.id === 'sharedListModal') event.currentTarget.classList.add('hidden');
+    });
+    document.getElementById('activeListSelect')?.addEventListener('change', event => switchActiveList(event.target.value));
+    document.getElementById('createSharedListForm')?.addEventListener('submit', event => {
+        event.preventDefault();
+        createSharedList();
+    });
+    document.getElementById('joinSharedListForm')?.addEventListener('submit', event => {
+        event.preventDefault();
+        joinSharedList(document.getElementById('joinInviteCodeInput')?.value);
+    });
     document.getElementById('trendingPanel')?.addEventListener('toggle', event => {
         if (event.currentTarget.open) resetTrendingDiscover();
     });
@@ -166,12 +186,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (user.photoURL) document.getElementById('userAvatar').src = user.photoURL;
 
                 setupFirebaseListener();
+                loadSharedLists();
+                const joinCode = new URLSearchParams(window.location.search).get('join');
+                if (joinCode) {
+                    const cleanUrl = new URL(window.location.href);
+                    cleanUrl.searchParams.delete('join');
+                    window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+                    joinSharedList(joinCode);
+                }
             } else {
                 currentUser = null;
                 if (unsubscribeWatchlist) {
                     unsubscribeWatchlist();
                     unsubscribeWatchlist = null;
                 }
+                if (unsubscribeSharedLists) {
+                    unsubscribeSharedLists();
+                    unsubscribeSharedLists = null;
+                }
+                userSharedLists = [];
+                activeListId = 'personal';
+                renderSharedLists();
+                updateActiveListControls();
                 currentWatchlistItems = [];
                 selectedDocIds.clear();
                 renderWatchlist();
@@ -546,6 +582,209 @@ function logoutUser() {
     if (auth) auth.signOut();
 }
 
+// Listen for shared lists this signed-in user can access.
+function loadSharedLists() {
+    if (unsubscribeSharedLists) {
+        unsubscribeSharedLists();
+        unsubscribeSharedLists = null;
+    }
+    if (!db || !currentUser) return;
+    unsubscribeSharedLists = db.collection('lists')
+        .where('members', 'array-contains', currentUser.uid)
+        .onSnapshot(snapshot => {
+            userSharedLists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (activeListId !== 'personal' && !userSharedLists.some(list => list.id === activeListId)) {
+                activeListId = 'personal';
+                setupFirebaseListener();
+            }
+            updateActiveListControls();
+            renderSharedLists();
+        }, error => {
+            console.error('Could not load shared lists.', error);
+            const status = document.getElementById('sharedListsStatus');
+            if (status) status.textContent = 'Shared lists could not be loaded. Check your Firestore access rules.';
+        });
+}
+
+// Create a shared list with a short code that members can share.
+async function createSharedList() {
+    const nameInput = document.getElementById('newSharedListName');
+    const status = document.getElementById('sharedListsStatus');
+    const name = nameInput?.value.trim();
+    if (!currentUser || !db) return;
+    if (!name) {
+        if (status) status.textContent = 'Enter a name for your shared list.';
+        return;
+    }
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let inviteCode = '';
+    if (window.crypto?.getRandomValues) {
+        const randomValues = new Uint32Array(6);
+        window.crypto.getRandomValues(randomValues);
+        inviteCode = [...randomValues].map(value => alphabet[value % alphabet.length]).join('');
+    } else {
+        inviteCode = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+    }
+    try {
+        const listRef = await db.collection('lists').add({
+            name,
+            ownerId: currentUser.uid,
+            inviteCode,
+            members: [currentUser.uid]
+        });
+        userSharedLists.push({ id: listRef.id, name, ownerId: currentUser.uid, inviteCode, members: [currentUser.uid] });
+        updateActiveListControls();
+        renderSharedLists();
+        nameInput.value = '';
+        if (status) status.textContent = 'Shared list created.';
+        switchActiveList(listRef.id);
+    } catch (error) {
+        console.error('Could not create shared list.', error);
+        if (status) status.textContent = 'Could not create the list. Check your Firestore access rules.';
+    }
+}
+
+// Join a shared list using its six-character invite code.
+async function joinSharedList(code) {
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const status = document.getElementById('sharedListsStatus');
+    if (!currentUser || !db) return;
+    if (!/^[A-Z0-9]{6}$/.test(cleanCode)) {
+        if (status) status.textContent = 'Enter a valid six-character invite code.';
+        return;
+    }
+    try {
+        const snapshot = await db.collection('lists').where('inviteCode', '==', cleanCode).limit(1).get();
+        if (snapshot.empty) {
+            if (status) status.textContent = 'No shared list was found for that code.';
+            return;
+        }
+        const listDoc = snapshot.docs[0];
+        await listDoc.ref.update({ members: firebase.firestore.FieldValue.arrayUnion(currentUser.uid) });
+        const joinedList = { id: listDoc.id, ...listDoc.data(), members: [...new Set([...(listDoc.data().members || []), currentUser.uid])] };
+        userSharedLists = [...userSharedLists.filter(list => list.id !== listDoc.id), joinedList];
+        updateActiveListControls();
+        renderSharedLists();
+        document.getElementById('joinInviteCodeInput').value = '';
+        if (status) status.textContent = `Joined ${listDoc.data().name || 'shared list'}.`;
+        switchActiveList(listDoc.id);
+    } catch (error) {
+        console.error('Could not join shared list.', error);
+        if (status) status.textContent = 'Could not join the list. Check your Firestore access rules.';
+    }
+}
+
+// Leave a shared list, or remove an owned list and its saved titles.
+async function leaveOrDeleteSharedList(listId) {
+    const list = userSharedLists.find(item => item.id === listId);
+    if (!db || !currentUser || !list) return;
+    const isOwner = list.ownerId === currentUser.uid;
+    const action = isOwner ? 'Delete this shared list and all its titles?' : 'Leave this shared list?';
+    if (!confirm(`${action} This cannot be undone.`)) return;
+    try {
+        if (isOwner) {
+            const snapshot = await db.collection('watchlist').where('listId', '==', listId).get();
+            for (let start = 0; start < snapshot.docs.length; start += 500) {
+                const batch = db.batch();
+                snapshot.docs.slice(start, start + 500).forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+            }
+            await db.collection('lists').doc(listId).delete();
+        } else {
+            await db.collection('lists').doc(listId).update({
+                members: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
+            });
+        }
+        if (activeListId === listId) switchActiveList('personal');
+    } catch (error) {
+        console.error('Could not update shared list membership.', error);
+        const status = document.getElementById('sharedListsStatus');
+        if (status) status.textContent = 'Could not update this list. Check your Firestore access rules.';
+    }
+}
+
+// Switch the library and add destination to the selected list.
+function switchActiveList(listId) {
+    const isAvailable = listId === 'personal' || userSharedLists.some(list => list.id === listId);
+    activeListId = isAvailable ? listId : 'personal';
+    updateActiveListControls();
+    selectedDocIds.clear();
+    setupFirebaseListener();
+}
+
+// Keep the list picker, add badge, and bulk-delete safety in sync.
+function updateActiveListControls() {
+    const picker = document.getElementById('activeListSelect');
+    if (picker) {
+        picker.replaceChildren();
+        const personalOption = document.createElement('option');
+        personalOption.value = 'personal';
+        personalOption.textContent = '👤 My Private List';
+        picker.appendChild(personalOption);
+        userSharedLists.forEach(list => {
+            const option = document.createElement('option');
+            option.value = list.id;
+            option.textContent = `👨‍👩‍👧‍👦 ${list.name || 'Shared List'}`;
+            picker.appendChild(option);
+        });
+        picker.value = activeListId;
+    }
+    const activeList = userSharedLists.find(list => list.id === activeListId);
+    const badge = document.getElementById('addingTargetBadge');
+    if (badge) badge.textContent = activeList ? `Adding to: 👨‍👩‍👧‍👦 ${activeList.name || 'Shared List'}` : 'Adding to: 👤 My Private List';
+    document.getElementById('deleteAllBtn')?.classList.toggle('hidden', activeListId !== 'personal');
+}
+
+// Show shared lists with invite codes and membership actions.
+function renderSharedLists() {
+    const container = document.getElementById('sharedListsContainer');
+    if (!container) return;
+    container.replaceChildren();
+    if (!userSharedLists.length) {
+        const empty = document.createElement('p');
+        empty.className = 'rounded-lg bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-500 dark:text-slate-400';
+        empty.textContent = 'You have not joined any shared lists yet.';
+        container.appendChild(empty);
+        return;
+    }
+    userSharedLists.forEach(list => {
+        const row = document.createElement('div');
+        row.className = 'flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800 p-3';
+        const details = document.createElement('div');
+        details.className = 'min-w-0';
+        const name = document.createElement('p');
+        name.className = 'truncate text-sm font-semibold';
+        name.textContent = list.name || 'Shared List';
+        const code = document.createElement('p');
+        code.className = 'text-[10px] text-slate-500 dark:text-slate-400';
+        code.textContent = `Invite code: ${list.inviteCode || 'Unavailable'}`;
+        details.append(name, code);
+        const actions = document.createElement('div');
+        actions.className = 'flex gap-2';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'rounded border border-slate-300 dark:border-slate-700 px-2 py-1 text-[10px] font-semibold hover:border-sky-400';
+        copy.textContent = 'Copy Link';
+        copy.addEventListener('click', async () => {
+            const link = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(list.inviteCode || '')}`;
+            try {
+                await navigator.clipboard.writeText(link);
+                document.getElementById('sharedListsStatus').textContent = 'Invite link copied.';
+            } catch (error) {
+                document.getElementById('sharedListsStatus').textContent = `Copy this invite link: ${link}`;
+            }
+        });
+        const leave = document.createElement('button');
+        leave.type = 'button';
+        leave.className = 'rounded border border-rose-300 dark:border-rose-800 px-2 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400';
+        leave.textContent = list.ownerId === currentUser?.uid ? 'Delete' : 'Leave';
+        leave.addEventListener('click', () => leaveOrDeleteSharedList(list.id));
+        actions.append(copy, leave);
+        row.append(details, actions);
+        container.appendChild(row);
+    });
+}
+
 function setupFirebaseListener() {
     if (currentUser) userProfileLoadPromise = loadUserProfile();
     if (unsubscribeWatchlist) {
@@ -553,12 +792,19 @@ function setupFirebaseListener() {
         unsubscribeWatchlist = null;
     }
     if (db && currentUser) {
-        unsubscribeWatchlist = db.collection('watchlist')
-            .where('userId', '==', currentUser.uid)
-            .onSnapshot(snapshot => {
+        const listeningListId = activeListId;
+        const listeningUserId = currentUser.uid;
+        const query = listeningListId === 'personal'
+            ? db.collection('watchlist').where('userId', '==', currentUser.uid)
+            : db.collection('watchlist').where('listId', '==', listeningListId);
+        unsubscribeWatchlist = query.onSnapshot(snapshot => {
+                if (activeListId !== listeningListId || currentUser?.uid !== listeningUserId) return;
                 currentWatchlistItems = [];
                 snapshot.forEach(doc => {
-                    currentWatchlistItems.push({ docId: doc.id, ...doc.data() });
+                    const item = doc.data();
+                    if (listeningListId !== 'personal' || !item.listId) {
+                        currentWatchlistItems.push({ docId: doc.id, ...item });
+                    }
                 });
                 const existingIds = new Set(currentWatchlistItems.map(item => item.docId));
                 selectedDocIds.forEach(docId => {
@@ -993,7 +1239,8 @@ async function saveCandidateToWatchlist(candidate, button = null) {
             platforms: providers.platforms,
             watched: false,
             addedBy: user.displayName || user.email,
-            userId: user.uid
+            userId: user.uid,
+            ...(activeListId !== 'personal' ? { listId: activeListId } : {})
         });
         if (button) button.textContent = '✓ Added';
         return true;
@@ -1546,6 +1793,12 @@ function renderGroupCards(parentContainer, items) {
                 </div>
             </div>
         `;
+        if (activeListId !== 'personal') {
+            const attribution = document.createElement('p');
+            attribution.className = 'mt-2 text-[10px] text-slate-400 dark:text-slate-500';
+            attribution.textContent = `By ${item.addedBy || 'Member'}`;
+            card.querySelector('.p-3 > div')?.appendChild(attribution);
+        }
         grid.appendChild(card);
     });
 
@@ -1770,7 +2023,7 @@ async function deleteSelected() {
 }
 
 async function deleteAll() {
-    if (!db || currentWatchlistItems.length === 0) return;
+    if (activeListId !== 'personal' || !db || currentWatchlistItems.length === 0) return;
     if (!confirm(`Delete all ${currentWatchlistItems.length} titles in your watchlist? This cannot be undone.`)) return;
 
     const docIds = currentWatchlistItems.map(item => item.docId);

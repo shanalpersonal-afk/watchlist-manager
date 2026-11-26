@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.14.0**
+**Current version: v2.15.0**
 
 ## 1. Project Vision
 
@@ -18,7 +18,15 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.14.0
+## 3. Completed Features Through v2.15.0
+
+### v2.15.0 Shared/Family Watchlists — Iteration 1
+
+- Added a `lists` collection for shared lists, each with an owner, member UIDs, and a six-character uppercase alphanumeric invite code.
+- Users can create a list, join by code, copy a `?join=` invite link, leave a list, or delete a list they own. Invite links are handled after sign-in and cleaned from the address bar.
+- The active-list picker switches between the private list and joined shared lists. Watchlist reads use `userId` for private items and `listId` for shared items; private reads filter out records with a `listId` field.
+- New shared-list items include `listId` and show their `addedBy` attribution. Delete All is hidden and guarded while a shared list is active; deleting an owned list removes its shared titles.
+- New shared-list functions: `loadSharedLists`, `createSharedList`, `joinSharedList`, `leaveOrDeleteSharedList`, and `switchActiveList`.
 
 ### v2.14.0 installable web app
 
@@ -106,7 +114,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 ## 5. Remaining Next Steps
 
-- **v2.15.0:** Add an optional **Shared/Family Watchlist** toggle.
+- **Shared/Family Watchlists Iteration 2:** Add a per-person `watchedBy` picker.
 - Add **Because You Watched** personalized recommendations.
 - Add **JSON/CSV Export and Import** for backups and migration.
 
