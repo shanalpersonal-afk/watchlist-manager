@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.16.0**
+**Current version: v2.16.1**
 
 ## 1. Project Vision
 
@@ -18,7 +18,11 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.16.0
+## 3. Completed Features Through v2.16.1
+
+### v2.16.1 Discover initialization fix
+
+- Defined `initDiscoverPresets()` and use it to connect each Discover preset chip to `applyDiscoverPreset()`, preventing the DOMContentLoaded ReferenceError and restoring the 1-tap preset actions.
 
 ### v2.16.0 Modern Mobile & Web UX Polish
 

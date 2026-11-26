@@ -167,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ['closeBulkUploadBtn', 'closeBulkUploadBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', closeBulkUploadModal));
     document.getElementById('openTrendingFiltersBtn')?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.remove('hidden'));
     ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => document.getElementById('trendingFiltersModal')?.classList.add('hidden')));
-    document.querySelectorAll('[data-discover-preset]').forEach(button => button.addEventListener('click', () => applyDiscoverPreset(button.dataset.discoverPreset)));
     document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
     document.getElementById('openProfileBtn')?.addEventListener('click', openProfileModal);
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
@@ -567,6 +566,13 @@ function applyDiscoverPreset(preset) {
     }
     document.querySelectorAll('[data-discover-preset]').forEach(button => button.classList.toggle('active', button.dataset.discoverPreset === preset));
     resetTrendingDiscover();
+}
+
+// Connect each Discover preset chip to its matching filter preset.
+function initDiscoverPresets() {
+    document.querySelectorAll('[data-discover-preset]').forEach(button => {
+        button.addEventListener('click', () => applyDiscoverPreset(button.dataset.discoverPreset));
+    });
 }
 
 function toggleManageMode() {
