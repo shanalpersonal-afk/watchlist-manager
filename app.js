@@ -1,6 +1,63 @@
 // ==========================================
 // 1. Firebase Configuration & Initialization
 // ==========================================
+// Recent release notes shown in the What's New sheet.
+const APP_UPDATES = [
+    { version: 'v2.17.3', date: '2026-11-27', title: 'Discover and onboarding', items: ['Hide Discover recommendations and undo the action; reset hidden titles from your profile.', 'New users are guided through the app automatically.', 'See recent changes in the new What’s New sheet.'] },
+    { version: 'v2.17.2', date: '2026-11-26', title: 'Discover controls', items: ['Improved recommendation controls and account preferences.'] },
+    { version: 'v2.17.1', date: '2026-11-20', title: 'Mobile modal improvements', items: ['Standardized mobile sheets and improved Discover filter state.'] },
+    { version: 'v2.17.0', date: '2026-11-18', title: 'A simpler mobile Watchlist', items: ['Updated navigation, Library controls, Discover cards, and guided tour.'] },
+    { version: 'v2.16.0', date: '2026-10-30', title: 'Mobile and discovery polish', items: ['Added discovery presets, title previews, and mobile navigation.'] }
+];
+
+// Return dated updates from the requested window, or the newest release.
+function getRecentUpdates(days = 7) {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - Math.max(0, Number(days) || 0));
+    const recent = APP_UPDATES.filter(update => new Date(`${update.date}T00:00:00`) >= cutoff);
+    return recent.length ? recent : APP_UPDATES.slice(0, 1);
+}
+
+// Show recent release notes and save the latest version as read.
+function openWhatsNewModal() {
+    const body = document.getElementById('whatsNewBody');
+    if (body) {
+        body.replaceChildren();
+        getRecentUpdates(7).forEach(update => {
+            const section = document.createElement('section');
+            section.className = 'mb-5 last:mb-0';
+            const heading = document.createElement('div');
+            heading.className = 'flex items-baseline justify-between gap-3';
+            const title = document.createElement('h3');
+            title.className = 'font-bold';
+            title.textContent = `${update.version} · ${update.title}`;
+            const date = document.createElement('time');
+            date.className = 'shrink-0 text-xs text-slate-500';
+            date.dateTime = update.date;
+            date.textContent = update.date;
+            heading.append(title, date);
+            const list = document.createElement('ul');
+            list.className = 'mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300';
+            update.items.forEach(item => { const li = document.createElement('li'); li.textContent = item; list.appendChild(li); });
+            section.append(heading, list);
+            body.appendChild(section);
+        });
+    }
+    const latest = APP_UPDATES[0];
+    try { localStorage.setItem('watchlist_last_seen_update', latest.date); } catch (error) { /* The modal can still be read this session. */ }
+    updateWhatsNewDot();
+    showModal('whatsNewModal');
+}
+
+// Show a dot until the latest release note has been opened.
+function updateWhatsNewDot() {
+    const dot = document.getElementById('whatsNewDot');
+    if (!dot || !APP_UPDATES.length) return;
+    let seen = '';
+    try { seen = localStorage.getItem('watchlist_last_seen_update') || ''; } catch (error) { /* Treat unavailable storage as unread. */ }
+    dot.classList.toggle('hidden', seen >= APP_UPDATES[0].date);
+}
 // Import the functions you need from the SDKs you need
 //import { initializeApp } from "firebase/app";
 // TODO: Add SDKs for Firebase products that you want to use
@@ -70,7 +127,7 @@ let unsubscribeSharedLists = null;
 let isCreatingList = false;
 let currentWatchlistItems = [];
 let currentUser = null;
-let userProfile = { subscriptions: [], languages: [], genres: [] };
+let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false };
 let userProfileUid = null;
 let userProfileLoadPromise = Promise.resolve();
 const selectedDocIds = new Set();
@@ -197,6 +254,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('openProfileBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openProfileModal(); });
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
     document.getElementById('saveProfileBtn')?.addEventListener('click', saveUserProfile);
+    document.getElementById('resetDismissedRecommendationsBtn')?.addEventListener('click', resetDismissedRecommendations);
+    document.getElementById('hideSuggestionBtn')?.addEventListener('click', () => {
+        if (activePreviewItem) dismissRecommendation(activePreviewItem.id || activePreviewItem.tmdbId, activePreviewItem.title);
+    });
+    document.getElementById('openWhatsNewBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openWhatsNewModal(); });
+    ['closeWhatsNewBtn', 'doneWhatsNewBtn', 'closeWhatsNewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('whatsNewModal')));
+    updateWhatsNewDot();
     document.getElementById('profileModal')?.addEventListener('click', event => {
         if (event.target.id === 'profileModal') closeProfileModal();
     });
@@ -293,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function startWatchlistTour() {
-    endWatchlistTour();
+    endWatchlistTour(false);
     tourStartingView = currentViewName;
     activeTourStep = 0;
     showWatchlistTourStep();
@@ -370,7 +434,7 @@ function advanceWatchlistTour() {
     showWatchlistTourStep();
 }
 
-function endWatchlistTour() {
+function endWatchlistTour(markCompleted = true) {
     if (tourTarget && tourOriginalStyles) {
         Object.assign(tourTarget.style, tourOriginalStyles);
     }
@@ -395,6 +459,11 @@ function endWatchlistTour() {
     tourOpenedBulkPanel = false;
     tourOpenedFilterDrawer = false;
     tourStartingView = null;
+    if (markCompleted && currentUser && userProfileUid === currentUser.uid) {
+        userProfile.hasCompletedTour = true;
+        try { localStorage.setItem(`watchlist_tour_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep tour completion in the profile. */ }
+        persistUserProfileSilently();
+    }
 }
 
 function switchView(viewName) {
@@ -691,7 +760,9 @@ function normalizeUserProfile(profile) {
     return {
         subscriptions: Array.isArray(source.subscriptions) ? [...new Set(source.subscriptions.filter(value => OTT_SERVICES.includes(value)))] : [],
         languages: Array.isArray(source.languages) ? [...new Set(source.languages.filter(value => Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, value)))] : [],
-        genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : []
+        genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : [],
+        dismissedIds: Array.isArray(source.dismissedIds) ? [...new Set(source.dismissedIds.map(String))] : [],
+        hasCompletedTour: source.hasCompletedTour === true
     };
 }
 
@@ -717,7 +788,7 @@ function applyProfileDefaultsToDiscover() {
 async function loadUserProfile() {
     if (!currentUser) return;
     const uid = currentUser.uid;
-    let localProfile = { subscriptions: [], languages: [], genres: [] };
+    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false };
     try {
         localProfile = normalizeUserProfile(JSON.parse(localStorage.getItem(getUserProfileStorageKey(uid)) || '{}'));
     } catch (error) {
@@ -745,6 +816,9 @@ async function loadUserProfile() {
         applyProfileDefaultsToDiscover();
         updateWatchableNowButton();
         renderWatchlist();
+        if (!userProfile.hasCompletedTour && localStorage.getItem(`watchlist_tour_done_${uid}`) !== 'true') {
+            window.setTimeout(() => { if (currentUser?.uid === uid && !userProfile.hasCompletedTour) startWatchlistTour(); }, 600);
+        }
     }
 }
 
@@ -757,6 +831,8 @@ async function openProfileModal() {
         await userProfileLoadPromise;
     }
     const profile = userProfileUid === currentUser?.uid ? userProfile : normalizeUserProfile(null);
+    const hiddenCount = document.getElementById('hiddenRecommendationsCount');
+    if (hiddenCount) hiddenCount.textContent = String(profile.dismissedIds.length);
     document.querySelectorAll('#profileModal [data-profile-group]').forEach(input => {
         input.checked = profile[input.dataset.profileGroup]?.includes(input.dataset.profileValue) || false;
     });
@@ -773,17 +849,13 @@ function closeProfileModal() {
 async function saveUserProfile() {
     if (!currentUser) return;
     const uid = currentUser.uid;
-    const profile = { subscriptions: [], languages: [], genres: [] };
+    const profile = { ...userProfile, subscriptions: [], languages: [], genres: [] };
     document.querySelectorAll('#profileModal [data-profile-group]:checked').forEach(input => {
         profile[input.dataset.profileGroup].push(input.dataset.profileValue);
     });
     userProfile = normalizeUserProfile(profile);
     userProfileUid = uid;
-    try {
-        localStorage.setItem(getUserProfileStorageKey(uid), JSON.stringify(userProfile));
-    } catch (error) {
-        console.warn('Could not save profile preferences in local storage.', error);
-    }
+    try { localStorage.setItem(getUserProfileStorageKey(uid), JSON.stringify(userProfile)); } catch (error) { console.warn('Could not save profile preferences in local storage.', error); }
     const shouldEnableWatchableNow = pendingWatchableActivation;
     hideModal('profileModal');
     trendingCache.clear();
@@ -794,11 +866,16 @@ async function saveUserProfile() {
     updateWatchableNowButton();
     renderWatchlist();
     if (document.getElementById('trendingPanel')?.open) resetTrendingDiscover();
-    try {
-        if (db) await db.collection('users').doc(uid).set(userProfile, { merge: true });
-    } catch (error) {
-        // Local storage remains the fallback when profile writes are not allowed.
-    }
+    await persistUserProfileSilently();
+}
+
+// Save profile fields locally and sync them without changing modal state.
+async function persistUserProfileSilently() {
+    if (!currentUser || userProfileUid !== currentUser.uid) return;
+    const uid = currentUser.uid;
+    userProfile = normalizeUserProfile(userProfile);
+    try { localStorage.setItem(getUserProfileStorageKey(uid), JSON.stringify(userProfile)); } catch (error) { /* Keep the current profile in memory. */ }
+    try { if (db) await db.collection('users').doc(uid).set(userProfile, { merge: true }); } catch (error) { /* Local storage remains available. */ }
 }
 
 function updateWatchableNowButton() {
@@ -1167,7 +1244,7 @@ function getGroupKey(item, groupBy) {
 // 3. Theme Switcher & UI Helpers
 // ==========================================
 // Show a brief success, info, or error message without blocking the screen.
-function showToast(message, variant = 'success') {
+function showToast(message, variant = 'success', action = null) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
     const toast = document.createElement('div');
@@ -1178,7 +1255,17 @@ function showToast(message, variant = 'success') {
     };
     toast.className = `rounded-xl border px-4 py-3 text-sm font-semibold shadow-xl ${variantClasses[variant] || variantClasses.success}`;
     toast.setAttribute('role', 'status');
-    toast.textContent = message;
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(text);
+    if (action?.label && typeof action.onClick === 'function') {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = action.label;
+        button.className = 'ml-3 underline underline-offset-2';
+        button.addEventListener('click', () => { action.onClick(); toast.remove(); });
+        toast.appendChild(button);
+    }
     container.appendChild(toast);
     window.setTimeout(() => {
         toast.classList.add('opacity-0', 'translate-y-2', 'transition-all');
@@ -1711,6 +1798,7 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     const overview = document.getElementById('detailPreviewOverview');
     const action = document.getElementById('detailPreviewActionBtn');
     const manageActions = document.getElementById('detailPreviewManageActions');
+    document.getElementById('detailPreviewCandidateActions')?.classList.toggle('hidden', isSaved || !(item.id || item.tmdbId));
     const imageUrl = item.poster || null;
     poster.classList.toggle('hidden', !imageUrl);
     fallback.classList.toggle('hidden', Boolean(imageUrl));
@@ -1867,7 +1955,7 @@ async function loadTrendingDiscover() {
         if (button) button.disabled = false;
         if (loadMoreButton) loadMoreButton.disabled = false;
         const cachedCandidates = trendingCache.get(cacheKey).filter(candidate =>
-            !isAlreadyInWatchlist(candidate) && (!append || !displayedTrendingIds.has(String(candidate.id)))
+            !isAlreadyInWatchlist(candidate) && !profile.dismissedIds.includes(String(candidate.id)) && (!append || !displayedTrendingIds.has(String(candidate.id)))
         );
         renderTrendingShelf(cachedCandidates, append);
         cachedCandidates.filter(candidate => !candidate.platform).forEach(candidate => {
@@ -1979,7 +2067,7 @@ async function loadTrendingDiscover() {
                     while (queue.length && candidates.length < 12) {
                         const candidate = queue.shift();
                         const id = String(candidate.id);
-                        if (seenIds.has(id) || displayedTrendingIds.has(id) || isAlreadyInWatchlist(candidate)) continue;
+                        if (seenIds.has(id) || displayedTrendingIds.has(id) || isAlreadyInWatchlist(candidate) || profile.dismissedIds.includes(id)) continue;
                         seenIds.add(id);
                         candidates.push(candidate);
                         break;
@@ -1989,7 +2077,7 @@ async function loadTrendingDiscover() {
         } else {
             candidates = sortCandidates(resultSets.flatMap(resultSet => resultSet.candidates));
             candidates = [...new Map(candidates.map(candidate => [String(candidate.id), candidate])).values()];
-            candidates = candidates.filter(candidate => !displayedTrendingIds.has(String(candidate.id)) && !isAlreadyInWatchlist(candidate)).slice(0, 12);
+            candidates = candidates.filter(candidate => !displayedTrendingIds.has(String(candidate.id)) && !isAlreadyInWatchlist(candidate) && !profile.dismissedIds.includes(String(candidate.id))).slice(0, 12);
         }
 
         trendingCache.set(cacheKey, candidates);
@@ -2082,6 +2170,13 @@ function renderTrendingShelf(candidates, append = false) {
         platformBadge.textContent = candidatePlatform;
         platformBadge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${candidate.platform ? getPlatformBadgeClass(candidatePlatform) : 'bg-slate-700/70'}`;
         posterFrame.appendChild(platformBadge);
+        const dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.textContent = '✕';
+        dismiss.setAttribute('aria-label', `Hide ${candidate.title}`);
+        dismiss.className = 'absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/70 text-xs text-white/80 hover:bg-rose-600';
+        dismiss.addEventListener('click', event => { event.stopPropagation(); dismissRecommendation(candidate.id, candidate.title); });
+        posterFrame.appendChild(dismiss);
         card.appendChild(posterFrame);
 
         const body = document.createElement('div');
@@ -2121,6 +2216,39 @@ function renderTrendingShelf(candidates, append = false) {
         shelf.appendChild(card);
     });
     if (loadMoreButton) loadMoreButton.classList.remove('hidden');
+}
+
+// Hide a Discover title and offer a one-tap undo.
+async function dismissRecommendation(tmdbId, title = 'Recommendation') {
+    if (!currentUser || userProfileUid !== currentUser.uid || tmdbId == null) return;
+    const id = String(tmdbId);
+    userProfile.dismissedIds = [...new Set([...(userProfile.dismissedIds || []), id])];
+    trendingCache.clear();
+    document.querySelector(`#trendingShelf article[data-tmdb-id="${CSS.escape(id)}"]`)?.remove();
+    displayedTrendingIds.delete(id);
+    const count = document.getElementById('hiddenRecommendationsCount');
+    if (count) count.textContent = String(userProfile.dismissedIds.length);
+    await persistUserProfileSilently();
+    showToast(`Hidden ${title}.`, 'success', { label: 'Undo', onClick: () => undoDismissRecommendation(id) });
+}
+
+// Restore a hidden Discover title and refresh recommendations.
+async function undoDismissRecommendation(tmdbId) {
+    const id = String(tmdbId);
+    userProfile.dismissedIds = (userProfile.dismissedIds || []).filter(value => String(value) !== id);
+    trendingCache.clear();
+    await persistUserProfileSilently();
+    resetTrendingDiscover();
+}
+
+// Clear all hidden recommendations and reload Discover.
+async function resetDismissedRecommendations() {
+    userProfile.dismissedIds = [];
+    const count = document.getElementById('hiddenRecommendationsCount');
+    if (count) count.textContent = '0';
+    trendingCache.clear();
+    await persistUserProfileSilently();
+    resetTrendingDiscover();
 }
 
 function updateBulkStatus() {

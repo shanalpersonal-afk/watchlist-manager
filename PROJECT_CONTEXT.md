@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.17.1**
+**Current version: v2.17.3**
 
 ## 1. Project Vision
 
@@ -18,14 +18,20 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.17.1
+## 3. Completed Features Through v2.17.3
+
+### v2.17.3 combined release
+
+- Discover recommendations can be hidden from poster cards or title previews. Hidden TMDB IDs are saved in the user profile, Undo is available from a toast, and Profile & OTTs can reset the hidden list.
+- First-time signed-in users automatically see the guided tour after the dashboard loads. Tour completion is saved in the user profile and local storage.
+- Added a seven-day **What's New (Last 7 Days)** modal backed by `APP_UPDATES`, with an unread dot in the account menu.
+- Current version is **v2.17.3**.
+- Remaining roadmap: **Because You Watched** picks, per-person `watchedBy`, and JSON/CSV Export & Import.
 
 ### v2.17.1 mobile modal ergonomics and Discover state
 
 - Standardized mobile sheets with a 75vh height cap, fixed headers and footers, an independently scrolling body, compact filter pills, and 44×44 px close targets. Background scrolling locks while a modal is open and restores after the final modal closes.
 - Discover mode chips now show a clear active state. Custom filters show their count and a one-line active summary with a Clear action that returns to Trending.
-- Current version is **v2.17.1**.
-- Remaining roadmap: **Because You Watched** picks, per-person `watchedBy`, and JSON/CSV Export & Import.
 
 ### v2.17.0 mobile-first minimalist redesign
 
@@ -150,10 +156,11 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 ### Key functions in `app.js`
 
 - Views and tour: `switchView`, `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`.
-- User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
+- User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `persistUserProfileSilently`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `renderPillFilterGroup`, `clearAllLibraryFilters`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`, `openDetailPreview`, `showToast`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
+- Release notes: `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`, `updateWhatsNewDot`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
