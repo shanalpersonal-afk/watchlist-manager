@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.17.3</title>
+    <title>Watchlist Studio v2.18.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -173,7 +173,7 @@
                     <div class="mt-4 space-y-4">
                         <div id="discoverPresets" class="flex items-center gap-1.5">
                             <button type="button" data-discover-preset="fresh" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🔥 Trending</button>
-                            <button type="button" data-discover-preset="profile" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">✨ For Me</button>
+                            <button type="button" data-discover-preset="profile" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🎯 Because You Watched</button>
                             <button id="openTrendingFiltersBtn" type="button" data-discover-mode="custom" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🎛️ Filter</button>
                         </div>
                         <div id="discoverActiveSummary" class="hidden flex min-w-0 items-center gap-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite"><span class="shrink-0">Active:</span><span id="discoverActiveSummaryText" class="min-w-0 flex-1 truncate"></span><button id="clearDiscoverFiltersBtn" type="button" class="shrink-0 font-semibold text-sky-600 underline underline-offset-2 dark:text-sky-400">Clear</button></div>
@@ -261,7 +261,7 @@
 
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
-            <p class="mt-1">v2.17.3</p>
+            <p class="mt-1">v2.18.0</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
                 <summary class="cursor-pointer text-center">📱 How to Install as App</summary>
                 <ul class="mt-2 space-y-1">
@@ -349,6 +349,7 @@
                 </div></fieldset>
             </div>
             <div class="mt-5 flex items-center justify-between border-t border-slate-200 pt-4 text-xs dark:border-slate-800"><p>Hidden recommendations: <span id="hiddenRecommendationsCount">0</span></p><button id="resetDismissedRecommendationsBtn" type="button" class="font-semibold text-sky-600 hover:underline dark:text-sky-400">Reset</button></div>
+            <div class="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-xs dark:border-slate-800"><p class="font-semibold">Taste Profile</p><button id="resetTasteOnboardingBtn" type="button" class="font-semibold text-sky-600 hover:underline dark:text-sky-400">Re-tune / Reset</button></div>
             </div>
             <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button id="saveProfileBtn" type="button" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600">Save Preferences</button></div>
         </div>
@@ -360,6 +361,18 @@
             <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><h2 id="whatsNewTitle" class="text-base font-extrabold">✨ What's New (Last 7 Days)</h2><button id="closeWhatsNewBtn" type="button" aria-label="Close What's New" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div>
             <div id="whatsNewBody" class="min-h-0 flex-1 overflow-y-auto p-4"></div>
             <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800"><button id="doneWhatsNewBtn" type="button" class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white">Done</button></div>
+        </div>
+    </div>
+
+    <div id="tasteOnboardingModal" data-modal-lock class="hidden fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="tasteOnboardingTitle">
+        <div class="relative z-10 mt-auto flex max-h-[82vh] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:max-h-[85vh] md:max-w-2xl md:rounded-2xl">
+            <div class="shrink-0 px-4 pt-2 md:pt-4"><div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div><div class="flex items-center justify-between"><div><h2 id="tasteOnboardingTitle" class="text-base font-extrabold">🎧 Build Your Taste Profile</h2><p class="text-[11px] text-slate-500">A few favorites help us find your next watch.</p></div><div class="flex items-center gap-1"><button id="skipTasteOnboardingBtn" type="button" class="min-h-11 rounded-lg px-3 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Skip</button><button id="closeTasteOnboardingBtn" type="button" aria-label="Close taste setup" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div></div></div>
+            <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+                <section><h3 class="mb-2 text-sm font-bold">Languages you enjoy</h3><div id="tasteLanguageOptions" class="flex flex-wrap gap-2"></div></section>
+                <section><h3 class="mb-2 text-sm font-bold">Genres you love</h3><div id="tasteGenreOptions" class="flex flex-wrap gap-2"></div></section>
+                <section><div class="mb-2 flex items-center justify-between gap-2"><h3 class="text-sm font-bold">Pick 3+ titles you loved</h3><span class="text-[10px] text-slate-500">Popular Indian and international picks</span></div><input id="tasteSearchInput" type="search" placeholder="Search movies or shows" class="mb-3 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"><div id="tasteSearchResults" class="grid grid-cols-3 gap-2" aria-live="polite"></div></section>
+            </div>
+            <div class="shrink-0 border-t border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"><div class="mb-2 text-center text-xs font-semibold text-slate-500" id="tasteSelectionCount">Pick 3+ titles you loved (0/3)</div><button id="saveTasteProfileBtn" type="button" disabled class="w-full rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50">✨ Save &amp; Show My Picks</button></div>
         </div>
     </div>
 

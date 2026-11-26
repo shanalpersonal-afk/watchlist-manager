@@ -3,6 +3,7 @@
 // ==========================================
 // Recent release notes shown in the What's New sheet.
 const APP_UPDATES = [
+    { version: 'v2.18.0', date: '2026-11-27', title: 'Taste based picks and free streaming', items: ['Find free and ad supported India streaming options for titles.', 'Get recommendations based on titles you have watched or loved.', 'Set your taste profile with a guided movie and show picker.'] },
     { version: 'v2.17.3', date: '2026-11-27', title: 'Discover and onboarding', items: ['Hide Discover recommendations and undo the action; reset hidden titles from your profile.', 'New users are guided through the app automatically.', 'See recent changes in the new What’s New sheet.'] },
     { version: 'v2.17.2', date: '2026-11-26', title: 'Discover controls', items: ['Improved recommendation controls and account preferences.'] },
     { version: 'v2.17.1', date: '2026-11-20', title: 'Mobile modal improvements', items: ['Standardized mobile sheets and improved Discover filter state.'] },
@@ -127,7 +128,7 @@ let unsubscribeSharedLists = null;
 let isCreatingList = false;
 let currentWatchlistItems = [];
 let currentUser = null;
-let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false };
+let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
 let userProfileUid = null;
 let userProfileLoadPromise = Promise.resolve();
 const selectedDocIds = new Set();
@@ -154,6 +155,12 @@ let trendingPage = 1;
 let displayedTrendingIds = new Set();
 let discoverMode = 'trending';
 let modalLockObserver = null;
+let tasteSelectedLanguages = new Set();
+let tasteSelectedGenres = new Set();
+let tasteSelectedSeeds = new Map();
+let tasteSearchTimer = null;
+let tasteSearchToken = 0;
+let tastePopularItems = [];
 const trendingCache = new Map();
 let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
@@ -255,12 +262,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('closeProfileBtn')?.addEventListener('click', closeProfileModal);
     document.getElementById('saveProfileBtn')?.addEventListener('click', saveUserProfile);
     document.getElementById('resetDismissedRecommendationsBtn')?.addEventListener('click', resetDismissedRecommendations);
+    document.getElementById('resetTasteOnboardingBtn')?.addEventListener('click', resetTasteOnboarding);
     document.getElementById('hideSuggestionBtn')?.addEventListener('click', () => {
         if (activePreviewItem) dismissRecommendation(activePreviewItem.id || activePreviewItem.tmdbId, activePreviewItem.title);
     });
     document.getElementById('openWhatsNewBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openWhatsNewModal(); });
     ['closeWhatsNewBtn', 'doneWhatsNewBtn', 'closeWhatsNewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('whatsNewModal')));
     updateWhatsNewDot();
+    ['closeTasteOnboardingBtn', 'skipTasteOnboardingBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', completeTasteOnboarding));
+    document.getElementById('tasteSearchInput')?.addEventListener('input', event => {
+        const query = event.target.value.trim();
+        clearTimeout(tasteSearchTimer);
+        const token = ++tasteSearchToken;
+        if (!query) { renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]); return; }
+        tasteSearchTimer = window.setTimeout(async () => {
+            try {
+                const results = await searchTMDBCandidates(query);
+                if (token === tasteSearchToken) renderTasteTitleGrid(results);
+            } catch (error) {
+                if (token === tasteSearchToken) document.getElementById('tasteSearchResults').textContent = 'Search is unavailable right now.';
+            }
+        }, 350);
+    });
+    document.getElementById('saveTasteProfileBtn')?.addEventListener('click', saveTasteOnboarding);
     document.getElementById('profileModal')?.addEventListener('click', event => {
         if (event.target.id === 'profileModal') closeProfileModal();
     });
@@ -434,7 +458,7 @@ function advanceWatchlistTour() {
     showWatchlistTourStep();
 }
 
-function endWatchlistTour(markCompleted = true) {
+async function endWatchlistTour(markCompleted = true) {
     if (tourTarget && tourOriginalStyles) {
         Object.assign(tourTarget.style, tourOriginalStyles);
     }
@@ -462,7 +486,10 @@ function endWatchlistTour(markCompleted = true) {
     if (markCompleted && currentUser && userProfileUid === currentUser.uid) {
         userProfile.hasCompletedTour = true;
         try { localStorage.setItem(`watchlist_tour_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep tour completion in the profile. */ }
-        persistUserProfileSilently();
+        await persistUserProfileSilently();
+        if (!userProfile.hasCompletedTasteOnboarding && localStorage.getItem(`watchlist_taste_done_${currentUser.uid}`) !== 'true') window.setTimeout(() => {
+            if (currentUser && !userProfile.hasCompletedTasteOnboarding) openTasteOnboardingModal();
+        }, 350);
     }
 }
 
@@ -729,7 +756,10 @@ function updateDiscoverFilterUI() {
 // Connect each Discover preset chip to its matching filter preset.
 function initDiscoverPresets() {
     document.querySelectorAll('[data-discover-preset]').forEach(button => {
-        button.addEventListener('click', () => applyDiscoverPreset(button.dataset.discoverPreset));
+        button.addEventListener('click', () => {
+            if (button.dataset.discoverPreset === 'profile') loadPersonalizedRecommendations();
+            else applyDiscoverPreset(button.dataset.discoverPreset);
+        });
     });
 }
 
@@ -762,7 +792,9 @@ function normalizeUserProfile(profile) {
         languages: Array.isArray(source.languages) ? [...new Set(source.languages.filter(value => Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, value)))] : [],
         genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : [],
         dismissedIds: Array.isArray(source.dismissedIds) ? [...new Set(source.dismissedIds.map(String))] : [],
-        hasCompletedTour: source.hasCompletedTour === true
+        hasCompletedTour: source.hasCompletedTour === true,
+        hasCompletedTasteOnboarding: source.hasCompletedTasteOnboarding === true,
+        tasteSeedMovies: Array.isArray(source.tasteSeedMovies) ? source.tasteSeedMovies.filter(seed => seed && seed.id && (seed.mediaType === 'movie' || seed.mediaType === 'tv')).map(seed => ({ id: seed.id, mediaType: seed.mediaType, title: String(seed.title || ''), poster: seed.poster || null })).slice(0, 20) : []
     };
 }
 
@@ -771,7 +803,7 @@ function getUserSubscriptions() {
     return currentUser && userProfileUid === currentUser.uid ? userProfile.subscriptions : [];
 }
 
-// Discover defaults: select saved services and languages for personalized India discovery.
+// Discover defaults: apply saved services, languages, and genres to For Me.
 function applyProfileDefaultsToDiscover() {
     const profile = currentUser && userProfileUid === currentUser.uid ? userProfile : normalizeUserProfile(null);
     if (document.getElementById('trendingPlatformOptions')) {
@@ -780,15 +812,172 @@ function applyProfileDefaultsToDiscover() {
     if (document.getElementById('trendingLanguageOptions')) {
         setMultiFilterValues('trending', 'language', profile.languages.length ? ['my_langs'] : []);
     }
+    if (document.getElementById('trendingGenreOptions')) setMultiFilterValues('trending', 'genre', profile.genres || []);
     discoverMode = profile.subscriptions.length || profile.languages.length ? 'profile' : 'trending';
     updateDiscoverFilterUI();
+}
+
+// Open taste setup with saved chips and a set of popular titles.
+async function openTasteOnboardingModal() {
+    const uid = currentUser?.uid;
+    if (!uid || userProfileUid !== uid) return;
+    tasteSelectedLanguages = new Set(userProfile.languages || []);
+    tasteSelectedGenres = new Set(userProfile.genres || []);
+    tasteSelectedSeeds = new Map((userProfile.tasteSeedMovies || []).map(seed => [`${seed.mediaType}:${seed.id}`, seed]));
+    renderTasteChoicePills();
+    renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]);
+    updateTasteSaveButton();
+    showModal('tasteOnboardingModal');
+    if (tastePopularItems.length) return;
+    const titleGrid = document.getElementById('tasteSearchResults');
+    if (titleGrid) titleGrid.textContent = 'Loading popular titles…';
+    const results = await Promise.allSettled(['hi', 'en', 'ta', 'ko'].flatMap(language => ['movie', ...(language === 'en' || language === 'hi' ? ['tv'] : [])].map(async mediaType => {
+        const params = new URLSearchParams({ sort_by: 'popularity.desc', 'vote_count.gte': '100', with_original_language: language, page: '1' });
+        const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
+        if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+        const data = await response.json();
+        return (data.results || []).slice(0, 8).map(result => mapTrendingResult(result, mediaType));
+    })));
+    const seen = new Set();
+    tastePopularItems = results.flatMap(result => result.status === 'fulfilled' ? result.value : []).filter(item => {
+        const key = `${item.mediaType}:${item.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, 15);
+    if (!tastePopularItems.length) tastePopularItems = [...tasteSelectedSeeds.values()];
+    if (currentUser?.uid === uid && !document.getElementById('tasteOnboardingModal')?.classList.contains('hidden') && !document.getElementById('tasteSearchInput')?.value.trim()) {
+        renderTasteTitleGrid([...tastePopularItems, ...tasteSelectedSeeds.values()]);
+    }
+}
+
+// Draw selectable language and genre pills from the app's supported choices.
+function renderTasteChoicePills() {
+    const render = (containerId, choices, selected, onChange) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.replaceChildren();
+        choices.forEach(([value, label]) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            const active = selected.has(value);
+            button.setAttribute('aria-pressed', String(active));
+            button.className = `rounded-full border px-3 py-1.5 text-xs font-semibold ${active ? 'border-sky-500 bg-sky-500 text-white' : 'border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300'}`;
+            button.addEventListener('click', () => {
+                if (selected.has(value)) selected.delete(value); else selected.add(value);
+                onChange();
+                renderTasteChoicePills();
+            });
+            container.appendChild(button);
+        });
+    };
+    render('tasteLanguageOptions', Object.entries(LANGUAGE_NAMES), tasteSelectedLanguages, updateTasteSaveButton);
+    render('tasteGenreOptions', Object.keys(TRENDING_GENRE_IDS).map(name => [name, name]), tasteSelectedGenres, updateTasteSaveButton);
+}
+
+// Render the poster picker and its selected state.
+function renderTasteTitleGrid(items) {
+    const container = document.getElementById('tasteSearchResults');
+    if (!container) return;
+    container.replaceChildren();
+    if (!items.length) {
+        container.textContent = 'No titles found. Try another search.';
+        return;
+    }
+    container.className = 'grid grid-cols-3 gap-2';
+    items.forEach(item => {
+        const key = `${item.mediaType}:${item.id}`;
+        const selected = tasteSelectedSeeds.has(key);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('aria-pressed', String(selected));
+        button.setAttribute('aria-label', `${selected ? 'Remove' : 'Select'} ${item.title}`);
+        button.className = `relative overflow-hidden rounded-lg border-2 text-left ${selected ? 'border-sky-400 ring-2 ring-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.6)]' : 'border-transparent'}`;
+        if (item.poster) {
+            const poster = document.createElement('img');
+            poster.src = item.poster.replace('/w200/', '/w500/');
+            poster.alt = `Poster for ${item.title}`;
+            poster.loading = 'lazy';
+            poster.className = 'aspect-[2/3] w-full object-cover';
+            button.appendChild(poster);
+        } else {
+            const fallback = document.createElement('span');
+            fallback.className = 'flex aspect-[2/3] items-center justify-center bg-slate-200 text-3xl dark:bg-slate-800';
+            fallback.textContent = '🎬';
+            button.appendChild(fallback);
+        }
+        if (selected) {
+            const check = document.createElement('span');
+            check.textContent = '✓';
+            check.className = 'absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-sm font-bold text-white shadow';
+            button.appendChild(check);
+        }
+        const label = document.createElement('span');
+        label.textContent = item.title;
+        label.className = 'block truncate bg-white px-1.5 py-1 text-[10px] font-semibold dark:bg-slate-900';
+        button.appendChild(label);
+        button.addEventListener('click', () => {
+            if (tasteSelectedSeeds.has(key)) tasteSelectedSeeds.delete(key);
+            else tasteSelectedSeeds.set(key, { id: item.id, mediaType: item.mediaType, title: item.title, poster: item.poster || null });
+            renderTasteTitleGrid(items);
+            updateTasteSaveButton();
+        });
+        container.appendChild(button);
+    });
+}
+
+// Keep the selected-title count and minimum-pick action in sync.
+function updateTasteSaveButton() {
+    const count = tasteSelectedSeeds.size;
+    const button = document.getElementById('saveTasteProfileBtn');
+    const label = document.getElementById('tasteSelectionCount');
+    if (label) label.textContent = `Pick 3+ titles you loved (${count}/3)`;
+    if (button) button.disabled = count < 3;
+}
+
+// Save selected taste chips and seed titles to the signed-in profile.
+async function saveTasteOnboarding() {
+    if (tasteSelectedSeeds.size < 3 || !currentUser) return;
+    userProfile.languages = [...tasteSelectedLanguages];
+    userProfile.genres = [...tasteSelectedGenres];
+    userProfile.tasteSeedMovies = [...tasteSelectedSeeds.values()].slice(0, 20);
+    userProfile.hasCompletedTasteOnboarding = true;
+    try { localStorage.setItem(`watchlist_taste_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep completion in the profile. */ }
+    await persistUserProfileSilently();
+    hideModal('tasteOnboardingModal');
+    applyProfileDefaultsToDiscover();
+    switchView('add');
+    loadPersonalizedRecommendations();
+    showToast('Taste profile saved. Your picks are ready.', 'success');
+}
+
+// Skip taste setup once and save that choice so it does not reopen automatically.
+async function completeTasteOnboarding() {
+    if (!currentUser) return;
+    userProfile.hasCompletedTasteOnboarding = true;
+    try { localStorage.setItem(`watchlist_taste_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep completion in the profile. */ }
+    await persistUserProfileSilently();
+    hideModal('tasteOnboardingModal');
+}
+
+// Clear saved seeds and reopen the taste picker from Profile & OTTs.
+async function resetTasteOnboarding() {
+    if (!currentUser) return;
+    userProfile.tasteSeedMovies = [];
+    userProfile.hasCompletedTasteOnboarding = false;
+    tasteSelectedSeeds.clear();
+    try { localStorage.removeItem(`watchlist_taste_done_${currentUser.uid}`); } catch (error) { /* The profile still records the reset. */ }
+    await persistUserProfileSilently();
+    closeProfileModal();
+    openTasteOnboardingModal();
 }
 
 // Profile sync: load this user's local preferences first, then merge Firestore data when available.
 async function loadUserProfile() {
     if (!currentUser) return;
     const uid = currentUser.uid;
-    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false };
+    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
     try {
         localProfile = normalizeUserProfile(JSON.parse(localStorage.getItem(getUserProfileStorageKey(uid)) || '{}'));
     } catch (error) {
@@ -816,8 +1005,18 @@ async function loadUserProfile() {
         applyProfileDefaultsToDiscover();
         updateWatchableNowButton();
         renderWatchlist();
-        if (!userProfile.hasCompletedTour && localStorage.getItem(`watchlist_tour_done_${uid}`) !== 'true') {
+        const tourDoneLocally = localStorage.getItem(`watchlist_tour_done_${uid}`) === 'true';
+        const tasteDoneLocally = localStorage.getItem(`watchlist_taste_done_${uid}`) === 'true';
+        if (!userProfile.hasCompletedTour && !tourDoneLocally) {
             window.setTimeout(() => { if (currentUser?.uid === uid && !userProfile.hasCompletedTour) startWatchlistTour(); }, 600);
+        } else {
+            if (!userProfile.hasCompletedTour && tourDoneLocally) {
+                userProfile.hasCompletedTour = true;
+                persistUserProfileSilently();
+            }
+            if (!userProfile.hasCompletedTasteOnboarding && !tasteDoneLocally) {
+                window.setTimeout(() => { if (currentUser?.uid === uid && userProfile.hasCompletedTour && !userProfile.hasCompletedTasteOnboarding) openTasteOnboardingModal(); }, 600);
+            }
         }
     }
 }
@@ -1534,13 +1733,13 @@ async function fetchTMDBDetails(queryTitle) {
             let primaryGenre = match.genre_ids ? (TMDB_GENRES[match.genre_ids[0]] || 'General') : 'General';
 
             let indiaPlatforms = [];
+            let freePlatforms = [];
             try {
                 const providerRes = await fetch(buildTMDBUrl(`/${mediaType}/${match.id}/watch/providers`));
                 const providerData = await providerRes.json();
-                if (providerData.results && providerData.results.IN && providerData.results.IN.flatrate) {
-                    const rawPlatforms = providerData.results.IN.flatrate.map(p => p.provider_name);
-                    indiaPlatforms = [...new Set(rawPlatforms.map(normalizePlatformName))];
-                }
+                const indiaProviders = providerData.results?.IN || {};
+                indiaPlatforms = [...new Set((indiaProviders.flatrate || []).map(p => normalizePlatformName(p.provider_name)))];
+                freePlatforms = [...new Set([...(indiaProviders.free || []), ...(indiaProviders.ads || [])].map(p => normalizePlatformName(p.provider_name)))];
             } catch (e) {}
 
             return {
@@ -1552,8 +1751,9 @@ async function fetchTMDBDetails(queryTitle) {
                 genre: primaryGenre,
                 rating: ratingVal,
                 language: languageName, // Saves original language name
-                platform: indiaPlatforms[0] || 'Not Streaming in IN',
+                platform: indiaPlatforms[0] || (freePlatforms.length ? `Free: ${freePlatforms[0]}` : 'Not Streaming in IN'),
                 platforms: indiaPlatforms,
+                freePlatforms,
                 poster: posterUrl,
                 overview: match.overview || ''
             };
@@ -1730,15 +1930,7 @@ function renderCandidateSearchLoading(container) {
 }
 
 async function fetchIndiaProviders(mediaType, tmdbId) {
-    try {
-        const response = await fetch(buildTMDBUrl(`/${mediaType}/${tmdbId}/watch/providers`));
-        const data = await response.json();
-        const rawProviders = data.results?.IN?.flatrate?.map(provider => provider.provider_name) || [];
-        const platforms = [...new Set(rawProviders.map(normalizePlatformName))];
-        return { platforms, platform: platforms[0] || 'Not Streaming in IN' };
-    } catch (error) {
-        return { platforms: [], platform: 'Not Streaming in IN' };
-    }
+    return fetchCandidateIndiaPlatforms(mediaType, tmdbId);
 }
 
 async function saveCandidateToWatchlist(candidate, button = null) {
@@ -1768,6 +1960,7 @@ async function saveCandidateToWatchlist(candidate, button = null) {
             overview: candidate.overview || '',
             platform: providers.platform,
             platforms: providers.platforms,
+            freePlatforms: providers.freePlatforms,
             watched: false,
             addedBy: user.displayName || user.email,
             userId: user.uid,
@@ -1810,18 +2003,23 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     title.textContent = item.title || 'Untitled';
     metadata.textContent = `${item.year || 'N/A'} · ${item.typeLabel || (item.mediaType === 'tv' || item.type === 'tv' ? '📺 TV Show' : '🎬 Movie')} · ⭐ ${item.rating || 'N/A'} · ${item.language || 'Unknown Language'}`;
     overview.textContent = item.overview || 'No synopsis is available for this title.';
-    const availablePlatforms = item.platforms?.length ? item.platforms : (item.platform ? [item.platform] : []);
-    platforms.textContent = `🇮🇳 India OTTs: ${availablePlatforms.join(', ') || 'Not available'}`;
+    const renderProviders = () => {
+        const paid = item.platforms || [];
+        const free = item.freePlatforms || [];
+        platforms.textContent = [paid.length ? `🇮🇳 Subscription OTTs: ${paid.join(', ')}` : '', free.length ? `🆓 Free / With Ads: ${free.join(', ')}` : ''].filter(Boolean).join(' · ') || '🇮🇳 India OTTs: Not available';
+    };
+    renderProviders();
     action.textContent = isSaved ? (item.watched ? '↩️ Mark To Watch' : '✓ Mark Watched') : '+ Add to Watchlist';
     manageActions?.classList.toggle('hidden', !isSaved);
-    if ((!Array.isArray(item.platforms) || !item.platforms.length) && (item.id || item.tmdbId)) {
+    if ((!Array.isArray(item.platforms) || !Array.isArray(item.freePlatforms)) && (item.id || item.tmdbId)) {
         platforms.textContent = '🇮🇳 India OTTs: Loading…';
         const mediaType = item.mediaType || item.type;
         const providerNames = await fetchCandidateIndiaPlatforms(mediaType, item.id || item.tmdbId);
         if (activePreviewItem === item) {
-            item.platforms = providerNames;
-            if (!item.platform && providerNames.length) item.platform = providerNames[0];
-            platforms.textContent = `🇮🇳 India OTTs: ${providerNames.join(', ') || 'Not available'}`;
+            item.platforms = providerNames.platforms;
+            item.freePlatforms = providerNames.freePlatforms;
+            if (!item.platform || item.platform === 'Not Streaming in IN') item.platform = providerNames.platform;
+            renderProviders();
         }
     }
 }
@@ -1872,17 +2070,19 @@ function mapTrendingResult(result, mediaType = result.media_type) {
     };
 }
 
-// Discover badges: fetch normalized streaming services available for one India title.
+// Fetch subscription, free, and ad supported India services for one title.
 async function fetchCandidateIndiaPlatforms(mediaType, id) {
     try {
         const response = await fetch(buildTMDBUrl(`/${mediaType}/${id}/watch/providers`));
         if (!response.ok) throw new Error(`TMDB provider lookup returned ${response.status}.`);
         const data = await response.json();
-        const providerNames = data.results?.IN?.flatrate?.map(provider => provider.provider_name) || [];
-        return [...new Set(providerNames.map(normalizePlatformName))];
+        const indiaProviders = data.results?.IN || {};
+        const platforms = [...new Set((indiaProviders.flatrate || []).map(provider => normalizePlatformName(provider.provider_name)))];
+        const freePlatforms = [...new Set([...(indiaProviders.free || []), ...(indiaProviders.ads || [])].map(provider => normalizePlatformName(provider.provider_name)))];
+        return { platforms, freePlatforms, platform: platforms[0] || (freePlatforms.length ? `Free: ${freePlatforms[0]}` : 'Not Streaming in IN') };
     } catch (error) {
         console.warn(`Could not load India platforms for ${mediaType} ${id}.`, error);
-        return [];
+        return { platforms: [], freePlatforms: [], platform: 'Not Streaming in IN' };
     }
 }
 
@@ -1926,6 +2126,63 @@ function resetTrendingDiscover() {
     loadTrendingDiscover();
 }
 
+// Recommend titles from watched items, then the user's saved taste seeds.
+async function loadPersonalizedRecommendations() {
+    const shelf = document.getElementById('trendingShelf');
+    if (!shelf) return;
+    discoverMode = 'profile';
+    updateDiscoverFilterUI();
+    const savedItems = [
+        ...currentWatchlistItems.filter(item => item.watched && item.tmdbId),
+        ...currentWatchlistItems.filter(item => !item.watched && item.tmdbId)
+    ].map(item => ({ id: item.tmdbId, mediaType: item.type === 'tv' ? 'tv' : 'movie', title: item.title, poster: item.poster }));
+    const seeds = [];
+    const seenSeeds = new Set();
+    [...savedItems, ...(userProfile.tasteSeedMovies || [])].forEach(seed => {
+        const key = `${seed.mediaType}:${seed.id}`;
+        if (seed.id && !seenSeeds.has(key) && seeds.length < 3) {
+            seenSeeds.add(key);
+            seeds.push(seed);
+        }
+    });
+    if (!seeds.length) {
+        applyProfileDefaultsToDiscover();
+        discoverMode = 'profile';
+        updateDiscoverFilterUI();
+        resetTrendingDiscover();
+        return;
+    }
+
+    const requestToken = ++trendingLoadToken;
+    trendingPage = 1;
+    document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
+    renderTrendingSkeletons(shelf);
+    try {
+        const results = await Promise.allSettled(seeds.map(async seed => {
+            const response = await fetch(buildTMDBUrl(`/${seed.mediaType}/${seed.id}/recommendations`, { page: '1' }));
+            if (!response.ok) throw new Error(`TMDB recommendations returned ${response.status}.`);
+            const data = await response.json();
+            return (data.results || []).map(result => mapTrendingResult(result, seed.mediaType));
+        }));
+        if (requestToken !== trendingLoadToken) return;
+        const merged = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+        const unique = [...new Map(merged.map(candidate => [String(candidate.id), candidate])).values()]
+            .filter(candidate => !isAlreadyInWatchlist(candidate) && !userProfile.dismissedIds.includes(String(candidate.id)))
+            .slice(0, 12);
+        renderTrendingShelf(unique);
+        document.getElementById('loadMoreTrendingBtn')?.classList.add('hidden');
+        await Promise.all(unique.map(async candidate => {
+            const providers = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+            candidate.platforms = providers.platforms;
+            candidate.freePlatforms = providers.freePlatforms;
+            candidate.platform = providers.platform;
+            if (requestToken === trendingLoadToken) updateTrendingPlatformBadge(candidate);
+        }));
+    } catch (error) {
+        if (requestToken === trendingLoadToken) shelf.textContent = 'Could not load personalized recommendations right now.';
+    }
+}
+
 // Discover pagination: request the next TMDB page and append fresh titles.
 function loadMoreTrending() {
     trendingPage += 1;
@@ -1959,9 +2216,10 @@ async function loadTrendingDiscover() {
         );
         renderTrendingShelf(cachedCandidates, append);
         cachedCandidates.filter(candidate => !candidate.platform).forEach(candidate => {
-            fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id).then(platforms => {
-                candidate.platforms = platforms;
-                candidate.platform = platforms[0] || 'Not Streaming in IN';
+            fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id).then(providers => {
+                candidate.platforms = providers.platforms;
+                candidate.freePlatforms = providers.freePlatforms;
+                candidate.platform = providers.platform;
                 updateTrendingPlatformBadge(candidate);
             });
         });
@@ -2088,15 +2346,16 @@ async function loadTrendingDiscover() {
             });
         }
         if (requestToken === trendingLoadToken) renderTrendingShelf(candidates, append);
-        if (platformNames.length !== 1 || wantsMySubs) {
+        {
             Promise.all(candidates.map(async candidate => {
                 const providers = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
-                candidate.platforms = providers;
-                const normalizedAvailable = providers.map(normalizePlatformName);
+                candidate.platforms = providers.platforms;
+                candidate.freePlatforms = providers.freePlatforms;
+                const normalizedAvailable = providers.platforms.map(normalizePlatformName);
                 const preferredPlatform = wantsMySubs
                     ? profile.subscriptions.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)))
                     : platformNames.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)));
-                candidate.platform = preferredPlatform ? normalizePlatformName(preferredPlatform) : (normalizedAvailable[0] || 'Not Streaming in IN');
+                candidate.platform = preferredPlatform ? normalizePlatformName(preferredPlatform) : providers.platform;
                 if (requestToken === trendingLoadToken) updateTrendingPlatformBadge(candidate);
             })).then(() => trendingCache.set(cacheKey, candidates));
         }
@@ -2125,9 +2384,10 @@ function updateTrendingPlatformBadge(candidate) {
     const card = [...document.querySelectorAll('#trendingShelf article')].find(item => item.dataset.tmdbId === String(candidate.id));
     const badge = card?.querySelector('[data-platform-badge]');
     if (!badge) return;
+    const isFree = !(candidate.platforms || []).length && (candidate.freePlatforms || []).length > 0;
     const platform = candidate.platform || 'Not Streaming in IN';
-    badge.textContent = platform;
-    badge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${getPlatformBadgeClass(platform)}`;
+    badge.textContent = isFree ? `🆓 ${platform}` : platform;
+    badge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${isFree ? 'bg-emerald-600' : getPlatformBadgeClass(platform)}`;
 }
 
 function renderTrendingShelf(candidates, append = false) {
@@ -2169,6 +2429,10 @@ function renderTrendingShelf(candidates, append = false) {
         platformBadge.dataset.platformBadge = 'true';
         platformBadge.textContent = candidatePlatform;
         platformBadge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${candidate.platform ? getPlatformBadgeClass(candidatePlatform) : 'bg-slate-700/70'}`;
+        if (!(candidate.platforms || []).length && (candidate.freePlatforms || []).length) {
+            platformBadge.textContent = `🆓 ${candidate.platform || `Free: ${candidate.freePlatforms[0]}`}`;
+            platformBadge.className = 'absolute right-2 top-2 max-w-[85%] truncate rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md';
+        }
         posterFrame.appendChild(platformBadge);
         const dismiss = document.createElement('button');
         dismiss.type = 'button';
@@ -2448,8 +2712,9 @@ function renderGroupCards(parentContainer, items) {
         renderedDocIds.add(item.docId);
         const card = document.createElement('div');
         card.className = 'movie-card min-w-0';
-        const mainPlatform = normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
-        const badgeClass = getPlatformBadgeClass(mainPlatform);
+        const hasFreeOnly = !(item.platforms || []).length && (item.freePlatforms || []).length > 0;
+        const mainPlatform = hasFreeOnly ? `Free: ${item.freePlatforms[0]}` : normalizePlatformName((item.platforms && item.platforms.length > 0) ? item.platforms[0] : item.platform);
+        const badgeClass = hasFreeOnly ? 'bg-emerald-600' : getPlatformBadgeClass(mainPlatform);
         const posterFrame = document.createElement('div');
         posterFrame.className = 'relative overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800';
         const poster = item.poster ? document.createElement('img') : document.createElement('div');
@@ -2467,7 +2732,7 @@ function renderGroupCards(parentContainer, items) {
         posterFrame.appendChild(poster);
         const badge = document.createElement('span');
         badge.className = `absolute right-2 top-2 max-w-[80%] truncate rounded-full px-2 py-1 text-[9px] font-bold uppercase text-white shadow ${badgeClass}`;
-        badge.textContent = mainPlatform;
+        badge.textContent = hasFreeOnly ? `🆓 ${mainPlatform}` : mainPlatform;
         posterFrame.appendChild(badge);
         const rating = document.createElement('span');
         rating.className = 'absolute bottom-2 left-2 rounded-md bg-slate-950/75 px-1.5 py-1 text-[10px] font-semibold text-amber-300';

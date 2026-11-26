@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.17.3**
+**Current version: v2.18.0**
 
 ## 1. Project Vision
 
@@ -18,15 +18,23 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.17.3
+## 3. Completed Features Through v2.18.0
+
+### v2.18.0 taste based discovery and free India OTTs
+
+- India provider lookups now include free and ad supported services. Free only titles show a green 🆓 badge, and title previews list subscription and free / ad supported services separately.
+- Added Spotify style `#tasteOnboardingModal` for language and genre preferences plus favorite title seeds. It follows the first walkthrough, appears once for existing users who have not completed it, and can be reset from Profile & OTTs.
+- **Because You Watched** recommendations use watched titles first, then titles to watch, then taste seeds. The For Me action falls back to profile based Discover when there are no seeds.
+- Current version is **v2.18.0**.
+- Remaining roadmap: **4-Friend Watch Circle** ratings and `watchedBy`, JSON/CSV Export & Import, and OMDb IMDb/RT scores.
+
+## Previous release notes
 
 ### v2.17.3 combined release
 
 - Discover recommendations can be hidden from poster cards or title previews. Hidden TMDB IDs are saved in the user profile, Undo is available from a toast, and Profile & OTTs can reset the hidden list.
 - First-time signed-in users automatically see the guided tour after the dashboard loads. Tour completion is saved in the user profile and local storage.
 - Added a seven-day **What's New (Last 7 Days)** modal backed by `APP_UPDATES`, with an unread dot in the account menu.
-- Current version is **v2.17.3**.
-- Remaining roadmap: **Because You Watched** picks, per-person `watchedBy`, and JSON/CSV Export & Import.
 
 ### v2.17.1 mobile modal ergonomics and Discover state
 
@@ -159,16 +167,17 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `persistUserProfileSilently`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
 - Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `renderPillFilterGroup`, `clearAllLibraryFilters`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
 - TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`, `openDetailPreview`, `showToast`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
+- Taste onboarding: `openTasteOnboardingModal`, `resetTasteOnboarding`, `saveTasteOnboarding`, `completeTasteOnboarding`, `renderTasteTitleGrid`.
+- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
 - Release notes: `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`, `updateWhatsNewDot`.
 - Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
 - Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
 
 ## 5. Remaining Next Steps
 
-- Add **Because You Watched** picks.
-- **Shared/Family Watchlists Iteration 2:** Add a per-person `watchedBy` picker.
+- **4-Friend Watch Circle:** ratings and per-person `watchedBy` tracking.
 - Add **JSON/CSV Export and Import** for backups and migration.
+- Add OMDb IMDb and Rotten Tomatoes scores.
 
 These items form the remaining v3.0.0 roadmap.
 
