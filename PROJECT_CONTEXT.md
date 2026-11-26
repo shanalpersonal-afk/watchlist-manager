@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.16.1**
+**Current version: v2.16.3**
 
 ## 1. Project Vision
 
@@ -18,7 +18,19 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
 
-## 3. Completed Features Through v2.16.1
+## 3. Completed Features Through v2.16.3
+
+### v2.16.3 mobile preview and faster Discover
+
+- Restyled `#detailPreviewModal` as a mobile bottom sheet with a compact poster and stacked synopsis/action, while retaining a centered desktop modal and backdrop dismissal.
+- Added six animated poster skeletons for Discover and a compact candidate search loading row.
+- Discover now renders posters immediately after `/discover` returns and fills OTT badges progressively as India provider lookups resolve.
+
+### Next roadmap steps
+
+- Add **Because You Watched** picks.
+- Track `watchedBy` per person.
+- Add JSON/CSV Export & Import.
 
 ### v2.16.1 Discover initialization fix
 

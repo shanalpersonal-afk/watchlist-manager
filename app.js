@@ -1510,8 +1510,7 @@ async function searchCandidateInput() {
 
     if (button) button.disabled = true;
     spinner?.classList.remove('hidden');
-    container.className = 'mt-4 text-sm text-slate-500 dark:text-slate-400';
-    container.textContent = 'Searching TMDB...';
+    renderCandidateSearchLoading(container);
     try {
         const candidates = await searchTMDBCandidates(query);
         if (requestToken === candidateSearchToken) renderCandidateResults(candidates);
@@ -1526,6 +1525,15 @@ async function searchCandidateInput() {
             if (button) button.disabled = false;
         }
     }
+}
+
+function renderCandidateSearchLoading(container) {
+    container.replaceChildren();
+    container.className = 'mt-4 grid gap-2';
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3';
+    row.innerHTML = '<span class="h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" aria-hidden="true"></span><span class="h-3 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-800"></span><span class="sr-only">Searching TMDB</span>';
+    container.appendChild(row);
 }
 
 async function fetchIndiaProviders(mediaType, tmdbId) {
@@ -1611,7 +1619,7 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     platforms.textContent = `🇮🇳 India OTTs: ${availablePlatforms.join(', ') || 'Not available'}`;
     action.textContent = isSaved ? (item.watched ? '↩️ Mark To Watch' : '✓ Mark Watched') : '+ Add to Watchlist';
     if (!item.platforms?.length && !item.platform && (item.id || item.tmdbId)) {
-        platforms.textContent = '🇮🇳 India OTTs: Loading...';
+        platforms.textContent = '🇮🇳 India OTTs: Loading…';
         const mediaType = item.mediaType || item.type;
         const providerNames = await fetchCandidateIndiaPlatforms(mediaType, item.id || item.tmdbId);
         if (activePreviewItem === item) {
@@ -1753,6 +1761,13 @@ async function loadTrendingDiscover() {
             !isAlreadyInWatchlist(candidate) && (!append || !displayedTrendingIds.has(String(candidate.id)))
         );
         renderTrendingShelf(cachedCandidates, append);
+        cachedCandidates.filter(candidate => !candidate.platform).forEach(candidate => {
+            fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id).then(platforms => {
+                candidate.platforms = platforms;
+                candidate.platform = platforms[0] || 'Not Streaming in IN';
+                updateTrendingPlatformBadge(candidate);
+            });
+        });
         return;
     }
 
@@ -1760,7 +1775,7 @@ async function loadTrendingDiscover() {
     if (loadMoreButton) loadMoreButton.disabled = true;
     if (!append) {
         shelf.replaceChildren();
-        shelf.textContent = 'Loading titles available in India...';
+        renderTrendingSkeletons(shelf);
     }
     try {
         const wantsMySubs = selectedPlatforms.includes('my_subs');
@@ -1868,28 +1883,26 @@ async function loadTrendingDiscover() {
             candidates = candidates.filter(candidate => !displayedTrendingIds.has(String(candidate.id)) && !isAlreadyInWatchlist(candidate)).slice(0, 12);
         }
 
+        trendingCache.set(cacheKey, candidates);
         if (platformNames.length === 1 && !wantsMySubs) {
             candidates.forEach(candidate => {
                 candidate.platform = platformNames[0];
                 candidate.platforms = [platformNames[0]];
             });
-        } else {
-            await Promise.all(candidates.map(async candidate => {
-                if (!Array.isArray(candidate.platforms)) {
-                    candidate._indiaPlatformsPromise ||= fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
-                    candidate.platforms = await candidate._indiaPlatformsPromise;
-                }
-                const normalizedAvailable = candidate.platforms.map(normalizePlatformName);
+        }
+        if (requestToken === trendingLoadToken) renderTrendingShelf(candidates, append);
+        if (platformNames.length !== 1 || wantsMySubs) {
+            Promise.all(candidates.map(async candidate => {
+                const providers = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+                candidate.platforms = providers;
+                const normalizedAvailable = providers.map(normalizePlatformName);
                 const preferredPlatform = wantsMySubs
                     ? profile.subscriptions.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)))
                     : platformNames.find(subscription => normalizedAvailable.includes(normalizePlatformName(subscription)));
-                candidate.platform = preferredPlatform
-                    ? normalizePlatformName(preferredPlatform)
-                    : (normalizedAvailable[0] || 'Not Streaming in IN');
-            }));
+                candidate.platform = preferredPlatform ? normalizePlatformName(preferredPlatform) : (normalizedAvailable[0] || 'Not Streaming in IN');
+                if (requestToken === trendingLoadToken) updateTrendingPlatformBadge(candidate);
+            })).then(() => trendingCache.set(cacheKey, candidates));
         }
-        trendingCache.set(cacheKey, candidates);
-        if (requestToken === trendingLoadToken) renderTrendingShelf(candidates, append);
     } catch (error) {
         if (requestToken === trendingLoadToken) {
             if (!append) shelf.textContent = `Could not load India discovery: ${error.message}`;
@@ -1899,6 +1912,25 @@ async function loadTrendingDiscover() {
         if (requestToken === trendingLoadToken && button) button.disabled = false;
         if (requestToken === trendingLoadToken && loadMoreButton) loadMoreButton.disabled = false;
     }
+}
+
+function renderTrendingSkeletons(shelf) {
+    shelf.replaceChildren();
+    for (let index = 0; index < 6; index += 1) {
+        const card = document.createElement('div');
+        card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
+        card.innerHTML = '<div class="aspect-[2/3] animate-pulse bg-slate-200 dark:bg-slate-800"></div><div class="space-y-2 p-2"><div class="h-3 w-4/5 animate-pulse rounded bg-slate-200 dark:bg-slate-800"></div><div class="h-2 w-1/2 animate-pulse rounded bg-slate-200 dark:bg-slate-800"></div></div>';
+        shelf.appendChild(card);
+    }
+}
+
+function updateTrendingPlatformBadge(candidate) {
+    const card = [...document.querySelectorAll('#trendingShelf article')].find(item => item.dataset.tmdbId === String(candidate.id));
+    const badge = card?.querySelector('[data-platform-badge]');
+    if (!badge) return;
+    const platform = candidate.platform || 'Not Streaming in IN';
+    badge.textContent = platform;
+    badge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${getPlatformBadgeClass(platform)}`;
 }
 
 function renderTrendingShelf(candidates, append = false) {
@@ -1914,11 +1946,10 @@ function renderTrendingShelf(candidates, append = false) {
         if (loadMoreButton) loadMoreButton.classList.add('hidden');
         return;
     }
-    if (shelf.textContent === 'Loading titles available in India...') shelf.replaceChildren();
-
     candidates.forEach(candidate => {
         displayedTrendingIds.add(String(candidate.id));
         const card = document.createElement('article');
+        card.dataset.tmdbId = String(candidate.id);
         card.className = 'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950';
         const posterFrame = document.createElement('div');
         posterFrame.className = 'relative aspect-[2/3] cursor-pointer';
@@ -1937,9 +1968,10 @@ function renderTrendingShelf(candidates, append = false) {
             posterFrame.appendChild(fallback);
         }
         const platformBadge = document.createElement('span');
-        const candidatePlatform = candidate.platform || 'Not Streaming in IN';
+        const candidatePlatform = candidate.platform || '…';
+        platformBadge.dataset.platformBadge = 'true';
         platformBadge.textContent = candidatePlatform;
-        platformBadge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${getPlatformBadgeClass(candidatePlatform)}`;
+        platformBadge.className = `absolute top-2 right-2 max-w-[85%] truncate rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase text-white shadow-md ${candidate.platform ? getPlatformBadgeClass(candidatePlatform) : 'bg-slate-700/70'}`;
         posterFrame.appendChild(platformBadge);
         card.appendChild(posterFrame);
 

@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.16.0</title>
+    <title>Watchlist Studio v2.16.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -57,7 +57,7 @@
     <div id="appDashboard" class="hidden pb-24 md:pb-8">
         <header class="flex flex-wrap items-center justify-between gap-2 mb-6 pb-4 border-b border-slate-300 dark:border-slate-800">
             <div>
-                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.16.0</span></h1>
+                <h1 class="text-2xl font-bold text-sky-600 dark:text-sky-400 flex items-center gap-2">🍿 Watchlist Studio <span class="text-xs bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-300 dark:border-sky-800 px-2 py-0.5 rounded-full">v2.16.3</span></h1>
             </div>
             <div class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
                 <button id="startTourBtn" type="button" class="whitespace-nowrap rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-bold hover:border-sky-400 transition-colors">Take a tour</button>
@@ -296,19 +296,20 @@
 
     <div id="detailPreviewModal" class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="detailPreviewTitle">
         <button id="closeDetailPreviewBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close title preview"></button>
-        <div class="relative z-10 mt-auto max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl md:my-auto md:max-w-xl md:rounded-2xl">
-            <div class="flex items-center justify-between p-4"><h2 class="text-sm font-bold">Title Preview</h2><button id="closeDetailPreviewBtn" type="button" aria-label="Close preview" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
-            <div class="grid gap-4 px-4 pb-4 sm:grid-cols-[10rem_1fr]">
-                <img id="detailPreviewPoster" alt="" class="hidden aspect-[2/3] w-full rounded-xl object-cover">
-                <div id="detailPreviewPosterFallback" class="hidden aspect-[2/3] w-full items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 text-4xl">🎬</div>
-                <div class="min-w-0">
+        <div class="relative z-10 mt-auto max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl md:my-auto md:max-w-lg md:rounded-2xl md:p-6">
+            <div class="md:hidden w-10 h-1 bg-slate-400/50 rounded-full mx-auto mb-3" aria-hidden="true"></div>
+            <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Title Preview</h2><button id="closeDetailPreviewBtn" type="button" aria-label="Close preview" class="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
+            <div class="mt-3 flex items-start gap-4">
+                <img id="detailPreviewPoster" alt="" class="hidden aspect-[2/3] w-24 shrink-0 rounded-xl object-cover sm:w-28">
+                <div id="detailPreviewPosterFallback" class="hidden aspect-[2/3] w-24 shrink-0 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 text-4xl sm:w-28">🎬</div>
+                <div class="min-w-0 flex-1">
                     <h3 id="detailPreviewTitle" class="text-xl font-extrabold"></h3>
                     <p id="detailPreviewMeta" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
                     <p id="detailPreviewPlatforms" class="mt-3 text-xs font-semibold text-sky-700 dark:text-sky-300"></p>
-                    <p id="detailPreviewOverview" class="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
-                    <button id="detailPreviewActionBtn" type="button" class="mt-5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600"></button>
                 </div>
             </div>
+            <p id="detailPreviewOverview" class="mt-4 line-clamp-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300"></p>
+            <button id="detailPreviewActionBtn" type="button" class="mt-4 w-full rounded-lg bg-sky-500 py-3 text-sm font-bold text-white hover:bg-sky-600"></button>
         </div>
     </div>
     <div id="toastContainer" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite" aria-atomic="false"></div>
