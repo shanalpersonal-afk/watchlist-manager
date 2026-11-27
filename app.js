@@ -793,12 +793,13 @@ function populateFilterDropdowns() {
 // 4. TMDB Details & Rendering Engine
 // ==========================================
 function isAlreadyInWatchlist(candidate) {
-    const candidateTitle = candidate.title.trim().toLocaleLowerCase();
+    if (!candidate || typeof candidate !== 'object') return false;
+    const candidateTitle = String(candidate.title || '').trim().toLocaleLowerCase();
     const candidateYear = String(candidate.year || 'N/A');
-    return currentWatchlistItems.some(item =>
+    return (Array.isArray(currentWatchlistItems) ? currentWatchlistItems : []).some(item => item && (
         (item.tmdbId !== undefined && String(item.tmdbId) === String(candidate.id)) ||
         ((item.title || '').trim().toLocaleLowerCase() === candidateTitle && String(item.year || 'N/A') === candidateYear)
-    );
+    ));
 }
 
 function renderCandidateResults(candidates) {
@@ -1247,7 +1248,7 @@ function normalizeTonightCandidate(item, fallbackMediaType = '') {
         : (item.release_date || item.first_air_date || '');
     const year = String(rawYear).split('-')[0] || 'N/A';
     let rating = 'N/A';
-    if (typeof item.vote_average === 'number') rating = item.vote_average.toFixed(1);
+    if (typeof item.vote_average === 'number' && Number.isFinite(item.vote_average)) rating = item.vote_average.toFixed(1);
     else if (item.rating !== undefined && item.rating !== null && item.rating !== 'N/A') rating = String(item.rating);
     return {
         ...item,
@@ -1262,13 +1263,13 @@ function normalizeTonightCandidate(item, fallbackMediaType = '') {
     };
 }
 
-// Section B: query fresh Taste Profile matches, then exclude saved and dismissed titles.
+// Section B: use taste matches first, then broaden to popular India titles.
 async function generateTonightFreshPicks() {
     const profile = currentUser && userProfileUid === currentUser.uid
         ? userProfile
         : normalizeUserProfile(null);
-    const languages = shuffleTonightItems(profile.languages || []).slice(0, 2);
-    const genres = shuffleTonightItems(profile.genres || []).slice(0, 2);
+    const languages = shuffleTonightItems((Array.isArray(profile.languages) ? profile.languages : []).filter(code => /^[a-z]{2,3}$/i.test(String(code)))).slice(0, 2);
+    const genres = shuffleTonightItems(Array.isArray(profile.genres) ? profile.genres : []).slice(0, 2);
     const mediaTypes = ['movie', 'tv'];
     const watchlistItems = Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [];
     const titleKey = item => `${String(item.mediaType || item.type || '').toLocaleLowerCase()}:${String(item.title || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase()}:${String(item.year || 'N/A').split('-')[0]}`;
@@ -1282,9 +1283,15 @@ async function generateTonightFreshPicks() {
     const isExcluded = candidate => {
         const id = identityKey(candidate);
         const titleYear = titleKey(candidate);
-        return watchlistIds.has(id) || watchlistTitleYears.has(titleYear) ||
+        return watchlistIds.has(id) || watchlistTitleYears.has(titleYear) || isAlreadyInWatchlist(candidate) ||
             dismissedIds.has(id) || dismissedTitleYears.has(titleYear);
     };
+
+    const uniqueRenderable = items => [...new Map(items
+        .map(item => normalizeTonightCandidate(item, item?.mediaType))
+        .filter(isTonightCandidateRenderable)
+        .filter(candidate => !isExcluded(candidate))
+        .map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()];
 
     const languageJobs = languages.length ? languages : ['All'];
     const genreJobs = genres.length ? genres : ['All'];
@@ -1301,7 +1308,7 @@ async function generateTonightFreshPicks() {
         });
         if (language !== 'All') params.set('with_original_language', language);
         if (genre !== 'All') {
-            const genreId = TRENDING_GENRE_IDS[genre]?.[mediaType];
+            const genreId = Number.isFinite(Number(genre)) ? Number(genre) : TRENDING_GENRE_IDS[genre]?.[mediaType];
             if (genreId) params.set('with_genres', String(genreId));
         }
         const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
@@ -1310,7 +1317,7 @@ async function generateTonightFreshPicks() {
         return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
     }));
     settled.forEach((result, index) => {
-        if (result.status === 'rejected') console.warn('Pick Tonight taste query failed.', jobs[index], result.reason);
+        if (result.status === 'rejected') { console.error('Pick Tonight taste query failed.', jobs[index], result.reason); logAppError('pick_tonight', result.reason); }
     });
 
     let candidates = shuffleTonightItems(settled
@@ -1319,39 +1326,48 @@ async function generateTonightFreshPicks() {
         .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
         .filter(isTonightCandidateRenderable)
         .filter(candidate => !isExcluded(candidate)));
-    candidates = [...new Map(candidates.map(candidate =>
-        [`${candidate.mediaType}:${candidate.id}`, candidate]
-    ).values())].slice(0, 3);
+    // Reuse already loaded AI picks and recommendations from watched or taste seed titles.
+    if (typeof aiPicksCache !== 'undefined' && aiPicksCache instanceof Map) {
+        candidates.push(...[...aiPicksCache.values()].flat());
+    }
+    const seeds = [
+        ...watchlistItems.filter(item => item.watched && item.tmdbId).map(item => ({ id: item.tmdbId, mediaType: item.type === 'tv' ? 'tv' : 'movie' })),
+        ...(Array.isArray(profile.tasteSeedMovies) ? profile.tasteSeedMovies : [])
+    ];
+    const uniqueSeeds = [...new Map(seeds.filter(seed => seed?.id && ['movie', 'tv'].includes(seed.mediaType)).map(seed => [`${seed.mediaType}:${seed.id}`, seed])).values()].slice(0, 3);
+    const recommendationResults = await Promise.allSettled(uniqueSeeds.map(async seed => {
+        const response = await fetch(buildTMDBUrl(`/${seed.mediaType}/${encodeURIComponent(seed.id)}/recommendations`, { page: '1' }));
+        if (!response.ok) throw new Error(`TMDB ${seed.mediaType} recommendations returned ${response.status}.`);
+        const data = await response.json();
+        return (data.results || []).map(result => normalizeTonightCandidate(result, seed.mediaType));
+    }));
+    recommendationResults.forEach(result => { if (result.status === 'rejected') { console.error('Pick Tonight recommendations failed.', result.reason); logAppError('pick_tonight', result.reason); } });
+    candidates.push(...recommendationResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value));
+    candidates = shuffleTonightItems(uniqueRenderable(candidates)).slice(0, 3);
 
-    // Popular India streaming movies fill sparse or empty Taste Profile results.
+    // India popularity results fill sparse taste matches across movies and TV.
     if (candidates.length < 2) {
-        const fallbackPages = [1, 2, 3];
-        const fallbackSettled = await Promise.allSettled(fallbackPages.map(async page => {
+        const fallbackJobs = ['movie', 'tv'].flatMap(mediaType => [1, 2, 3].map(page => ({ mediaType, page })));
+        const fallbackSettled = await Promise.allSettled(fallbackJobs.map(async ({ mediaType, page }) => {
             const params = new URLSearchParams({
                 watch_region: 'IN',
-                with_watch_monetization_types: 'flatrate',
                 sort_by: 'popularity.desc',
-                'vote_count.gte': '10',
+                'vote_count.gte': '5',
                 page: String(page)
             });
-            const response = await fetch(buildTMDBUrl('/discover/movie', params));
-            if (!response.ok) throw new Error(`TMDB India movie fallback returned ${response.status}.`);
+            const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
+            if (!response.ok) throw new Error(`TMDB India ${mediaType} fallback returned ${response.status}.`);
             const data = await response.json();
-            return (data.results || []).map(result => normalizeTonightCandidate(result, 'movie'));
+            return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
         }));
         fallbackSettled.forEach((result, index) => {
-            if (result.status === 'rejected') console.warn('Pick Tonight India fallback query failed.', { page: fallbackPages[index] }, result.reason);
+            if (result.status === 'rejected') { console.error('Pick Tonight India fallback query failed.', fallbackJobs[index], result.reason); logAppError('pick_tonight', result.reason); }
         });
         const fallback = fallbackSettled
             .filter(result => result.status === 'fulfilled')
             .flatMap(result => result.value)
-            .map(candidate => normalizeTonightCandidate(candidate, 'movie'))
-            .filter(isTonightCandidateRenderable)
-            .filter(candidate => !isExcluded(candidate));
-        candidates = [...new Map([...candidates, ...shuffleTonightItems(fallback)]
-            .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
-            .filter(isTonightCandidateRenderable)
-            .map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()].slice(0, 3);
+            .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType));
+        candidates = [...uniqueRenderable([...candidates, ...shuffleTonightItems(fallback)])].slice(0, 3);
         if (candidates.length < 2) console.warn('Pick Tonight could not find two eligible cards after the India streaming fallback.', { count: candidates.length });
     }
     return candidates.map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
@@ -1467,7 +1483,8 @@ async function generateTonightPicks() {
         const candidates = await generateTonightFreshPicks();
         if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks(candidates);
     } catch (error) {
-        console.warn('Could not generate Pick Tonight recommendations.', error);
+        console.error('Could not generate Pick Tonight recommendations.', error);
+        logAppError('pick_tonight', error);
         if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks([]);
     }
 }

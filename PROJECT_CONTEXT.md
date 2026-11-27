@@ -1,17 +1,14 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.21.3**
+**Current version: v2.21.4**
 
-### v2.21.3 Repository Instructions and Pick Tonight Metadata
+### v2.21.4 Pick Tonight recommendation recovery
 
-- Added [.github/copilot-instructions.md](.github/copilot-instructions.md) to document the strict Vanilla JS Browser Compat architecture and feature handoff rule.
-- **Root cause:** Fresh For Your Taste cards could receive raw TMDB discover objects whose fields use `name`, `release_date`, `first_air_date`, `vote_average`, `poster_path`, `media_type`, and `id`.
-- **Fix:** added `normalizeTonightCandidate()` in `app.js` and normalize results before filtering and rendering. Cards now derive title, year, rating, poster, media type, and TMDB ID consistently.
-- The normalized `mediaType` and `id` are reused by `fetchTMDBTrailerUrl`, `fetchCandidateIndiaPlatforms`, and `saveCandidateToWatchlist`, keeping Trailer and Add actions functional.
-- Pick Tonight now logs rejected Taste Profile and India fallback requests, plus generation failures, using `console.warn`.
-- Candidate exclusions use typed `mediaType:id` identities or exact normalized `mediaType:title:year` keys. New dismissals persist this metadata as `dismissedItems`; older `dismissedIds` records do not contain a media type and are not used by Pick Tonight because that could hide a different title with a colliding ID.
-- When taste-filtered results are empty or fewer than two, Pick Tonight fills from popular India flatrate movie Discover pages. Cards are limited to candidates with a title, release year, rating, and poster.
-- Current version: **v2.21.3**.
+- **Root cause:** `buildTMDBUrl()`, `Promise.allSettled()` unwrapping, and `normalizeTonightCandidate()` were already wired consistently. The failure path was the overly narrow fallback: it queried only flatrate movies, used `vote_count.gte=10`, and could still have every result removed by saved/dismissed filtering or card metadata requirements. Taste query rejections were only sent to `console.warn`, which hid useful diagnostics. Profile languages are stored as ISO codes and genres as names; the query now explicitly validates/converts those forms and accepts numeric genre IDs too.
+- **Fix:** `generateTonightFreshPicks()` now merges eligible seed recommendations and cached AI picks into Tier 1, then runs a two-type India Discover fallback (`/discover/movie` and `/discover/tv`) with `watch_region=IN`, popularity sorting, and `vote_count.gte=5`. All tiers normalize candidates, require title/year/rating/poster, and exclude saved and typed-dismissed titles. Provider lookup still runs for each rendered card so the India OTT badge is populated independently of Discover.
+- `normalizeTonightCandidate()` now accepts finite zero ratings; `isAlreadyInWatchlist()` safely handles absent candidates, watchlist arrays, and item properties.
+- Pick Tonight query and generation errors now use `console.error` and `logAppError('pick_tonight', err)`.
+- Current version/status: **v2.21.4**.
 
 ### v2.21.2 Pick Tonight
 
@@ -239,12 +236,12 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
 - Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
 - UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
-- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`, `isTonightCandidateRenderable`.
+- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`, `isTonightCandidateRenderable`, `isAlreadyInWatchlist` (hardened).
 - Pick Tonight DOM IDs: `#pickTonightBtn`, `#pickTonightModal`, `#pickTonightBody`, `#tonightWatchlistSection`, `#tonightWatchlistResults`, `#tonightFreshResults`, `#rerollTonightBtn`, `#closePickTonightBtn`, `#closePickTonightBackdrop`.
 
 ## 5. Remaining Next Steps
 
-- **Known issues:** Taste Profile queries may be sparse for uncommon language/genre combinations, so Pick Tonight uses a broad TMDB Discover fallback and should continue to be tested with very small watchlists.
+- **Known issues:** TMDB can still return fewer than two eligible titles if popular results lack required card metadata or all results are already saved/dismissed; the broadened movie and TV fallback greatly reduces this case.
 - **v2.22.0 US + India Region Switcher.**
 - **v2.23.0 4-Friend Watch Circle.**
 

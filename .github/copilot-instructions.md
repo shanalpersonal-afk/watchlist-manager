@@ -25,3 +25,5 @@
 
 - Update `PROJECT_CONTEXT.md` after completing any feature or fix.
 - Record the root-cause diagnosis, changed behavior, current version/status, new functions or DOM IDs, known issues, and remaining next steps.
+- Before finishing, verify that the implementation and `PROJECT_CONTEXT.md` changes are saved in the worktree and inspect the resulting diff.
+- When asked for check-in/push commands, provide the exact terminal commands to stage, commit, and push all requested changes. Do not claim they are checked in or pushed unless those commands were actually run.
