@@ -50,6 +50,8 @@ let tasteStepIndex = 0;
 let tastePage = 1;
 let tastePairItems = [];
 let tastePairSeen = new Set();
+let tonightFreshPicks = [];
+let tonightFreshLoadToken = 0;
 const trendingCache = new Map();
 let indiaWatchProviderMapPromise = null;
 const OTT_SERVICES = ['Netflix', 'Prime Video', 'Disney+ Hotstar', 'JioCinema', 'Zee5', 'SonyLIV'];
@@ -90,7 +92,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-modal-lock]').forEach(modal => modalLockObserver.observe(modal, { attributes: true, attributeFilter: ['class'] }));
     syncModalBodyScroll();
     document.getElementById('accountMenuBtn')?.addEventListener('click', () => toggleAccountMenu());
-    document.getElementById('surpriseMeBtn')?.addEventListener('click', surpriseMe);
+    document.getElementById('pickTonightBtn')?.addEventListener('click', openPickTonightModal);
+    document.getElementById('rerollTonightBtn')?.addEventListener('click', rerollTonightPicks);
+    document.getElementById('closePickTonightBtn')?.addEventListener('click', () => hideModal('pickTonightModal'));
+    document.getElementById('closePickTonightBackdrop')?.addEventListener('click', () => hideModal('pickTonightModal'));
     document.getElementById('detailPreviewShareBtn')?.addEventListener('click', shareActivePreview);
     
     const googleBtn = document.getElementById('googleSignInBtn');
@@ -1169,6 +1174,239 @@ function surpriseMe() {
     const item = unwatched[Math.floor(Math.random() * unwatched.length)];
     trackEvent('surprise_me_used');
     openDetailPreview({ ...item, mediaType: item.mediaType || item.type, tonightPick: true }, true);
+}
+
+function shuffleTonightItems(items) {
+    const shuffled = [...(Array.isArray(items) ? items : [])];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
+}
+
+// Section A: choose saved unwatched titles and prioritize subscription or free availability.
+function renderTonightWatchlistPicks() {
+    const section = document.getElementById('tonightWatchlistSection');
+    const container = document.getElementById('tonightWatchlistResults');
+    if (!section || !container) return;
+    const subscriptions = new Set((getUserSubscriptions() || []).map(normalizePlatformName));
+    const unwatched = (Array.isArray(currentWatchlistItems) ? currentWatchlistItems : []).filter(item => item && !item.watched);
+    if (!unwatched.length) {
+        section.classList.add('hidden');
+        container.replaceChildren();
+        return;
+    }
+    const ranked = shuffleTonightItems(unwatched).sort((a, b) => {
+        const availabilityScore = item => {
+            const platforms = getItemPlatforms(item).map(normalizePlatformName);
+            if (platforms.some(platform => subscriptions.has(platform))) return 2;
+            if ((item.freePlatforms || []).length > 0) return 1;
+            return 0;
+        };
+        return availabilityScore(b) - availabilityScore(a);
+    });
+    section.classList.remove('hidden');
+    container.replaceChildren();
+    ranked.slice(0, 2).forEach(item => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left dark:border-slate-800 dark:bg-slate-950';
+        card.addEventListener('click', () => openDetailPreview(item, true));
+        if (item.poster) {
+            const poster = document.createElement('img');
+            poster.src = item.poster.replace('/w200/', '/w500/');
+            poster.alt = `Poster for ${item.title}`;
+            poster.className = 'aspect-[2/3] w-full object-cover';
+            card.appendChild(poster);
+        } else {
+            const fallback = document.createElement('div');
+            fallback.className = 'flex aspect-[2/3] items-center justify-center bg-slate-200 text-3xl dark:bg-slate-800';
+            fallback.textContent = '🎬';
+            card.appendChild(fallback);
+        }
+        const label = document.createElement('span');
+        label.className = 'block truncate px-2 py-2 text-xs font-bold';
+        label.textContent = item.title || 'Untitled';
+        card.appendChild(label);
+        container.appendChild(card);
+    });
+}
+
+// Section B: query fresh Taste Profile matches, then exclude saved and dismissed titles.
+async function generateTonightFreshPicks() {
+    const profile = currentUser && userProfileUid === currentUser.uid
+        ? userProfile
+        : normalizeUserProfile(null);
+    const languages = shuffleTonightItems(profile.languages || []).slice(0, 2);
+    const genres = shuffleTonightItems(profile.genres || []).slice(0, 2);
+    const mediaTypes = ['movie', 'tv'];
+    const watchlistIds = new Set((Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [])
+        .map(item => String(item.tmdbId || item.id || '')).filter(Boolean));
+    const dismissedIds = new Set((profile.dismissedIds || []).map(String));
+    const dismissedTitles = new Set((profile.dismissedTitles || []).map(title => String(title).trim().toLocaleLowerCase()).filter(Boolean));
+    const watchlistTitles = new Set((Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [])
+        .map(item => String(item.title || '').trim().toLocaleLowerCase()).filter(Boolean));
+    const isExcluded = candidate => {
+        const id = String(candidate.id || '');
+        const title = String(candidate.title || '').trim().toLocaleLowerCase();
+        return watchlistIds.has(id) || dismissedIds.has(id) || watchlistTitles.has(title) || dismissedTitles.has(title);
+    };
+
+    const languageJobs = languages.length ? languages : ['All'];
+    const genreJobs = genres.length ? genres : ['All'];
+    const jobs = mediaTypes.flatMap(mediaType =>
+        languageJobs.flatMap(language => genreJobs.map(genre => ({ mediaType, language, genre })))
+    ).slice(0, 8);
+    if (!jobs.length) mediaTypes.forEach(mediaType => jobs.push({ mediaType, language: 'All', genre: 'All' }));
+
+    const settled = await Promise.allSettled(jobs.map(async ({ mediaType, language, genre }) => {
+        const params = new URLSearchParams({
+            sort_by: 'popularity.desc',
+            'vote_count.gte': '10',
+            page: String(1 + Math.floor(Math.random() * 3))
+        });
+        if (language !== 'All') params.set('with_original_language', language);
+        if (genre !== 'All') {
+            const genreId = TRENDING_GENRE_IDS[genre]?.[mediaType];
+            if (genreId) params.set('with_genres', String(genreId));
+        }
+        const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
+        if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+        const data = await response.json();
+        return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+    }));
+
+    let candidates = shuffleTonightItems(settled
+        .filter(result => result.status === 'fulfilled')
+        .flatMap(result => result.value)
+        .filter(candidate => candidate && candidate.title && !isExcluded(candidate)));
+    candidates = [...new Map(candidates.map(candidate =>
+        [`${candidate.mediaType}:${candidate.id}`, candidate]
+    ).values())].slice(0, 3);
+
+    // Broad fallback keeps the sheet useful if Taste Profile filters are sparse.
+    if (candidates.length < 2) {
+        const fallbackSettled = await Promise.allSettled(mediaTypes.map(async mediaType => {
+            const params = new URLSearchParams({ sort_by: 'popularity.desc', 'vote_count.gte': '10', page: String(1 + Math.floor(Math.random() * 3)) });
+            const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
+            if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+            const data = await response.json();
+            return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+        }));
+        const fallback = fallbackSettled.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
+        candidates = [...new Map([...candidates, ...shuffleTonightItems(fallback).filter(candidate => !isExcluded(candidate))]
+            .map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()].slice(0, 3);
+    }
+    return candidates.slice(0, 3);
+}
+
+async function renderTonightFreshPicks(candidates) {
+    const container = document.getElementById('tonightFreshResults');
+    if (!container) return;
+    container.replaceChildren();
+    if (!candidates.length) {
+        const fallback = document.createElement('p');
+        fallback.className = 'text-xs text-slate-500';
+        fallback.textContent = 'Try a fresh pick again in a moment.';
+        container.appendChild(fallback);
+        return;
+    }
+    container.className = 'grid grid-cols-1 gap-2';
+    candidates.forEach(candidate => {
+        const card = document.createElement('article');
+        card.className = 'flex min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950';
+        if (candidate.poster) {
+            const poster = document.createElement('img');
+            poster.src = candidate.poster.replace('/w200/', '/w500/');
+            poster.alt = `Poster for ${candidate.title}`;
+            poster.className = 'h-28 w-20 shrink-0 rounded-lg object-cover';
+            card.appendChild(poster);
+        } else {
+            const fallback = document.createElement('div');
+            fallback.className = 'flex h-28 w-20 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-2xl dark:bg-slate-800';
+            fallback.textContent = '🎬';
+            card.appendChild(fallback);
+        }
+        const details = document.createElement('div');
+        details.className = 'min-w-0 flex-1';
+        const title = document.createElement('h4');
+        title.className = 'truncate text-sm font-bold';
+        title.textContent = candidate.title;
+        const meta = document.createElement('p');
+        meta.className = 'mt-1 text-xs text-slate-500 dark:text-slate-400';
+        meta.textContent = `${candidate.year || 'N/A'} · ⭐ ${candidate.rating || 'N/A'}`;
+        const ott = document.createElement('p');
+        ott.className = 'mt-2 truncate text-[11px] font-semibold text-sky-700 dark:text-sky-300';
+        ott.textContent = candidate.platform || 'Finding India OTT…';
+        details.append(title, meta, ott);
+        const actions = document.createElement('div');
+        actions.className = 'mt-2 flex gap-2';
+        const trailer = document.createElement('button');
+        trailer.type = 'button';
+        trailer.className = 'rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-bold dark:border-slate-700';
+        trailer.textContent = '▶ Trailer';
+        trailer.addEventListener('click', async () => {
+            trailer.disabled = true;
+            const url = await fetchTMDBTrailerUrl(candidate.mediaType, candidate.id);
+            trailer.disabled = false;
+            window.open(url, '_blank', 'noopener');
+        });
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white';
+        add.textContent = '+ Add';
+        add.addEventListener('click', async () => {
+            try {
+                const saved = await saveCandidateToWatchlist(candidate, add);
+                if (saved) {
+                    add.textContent = '✓ Added';
+                    card.classList.add('opacity-75');
+                    generateTonightPicks();
+                }
+            } catch (error) {
+                showToast(error.message || 'Could not add this title.', 'error');
+            }
+        });
+        actions.append(trailer, add);
+        details.appendChild(actions);
+        card.appendChild(details);
+        container.appendChild(card);
+
+        fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id).then(providers => {
+            candidate.platforms = providers.platforms;
+            candidate.freePlatforms = providers.freePlatforms;
+            candidate.platform = providers.platform;
+            ott.textContent = providers.platform || 'Not Streaming in IN';
+        });
+    });
+}
+
+async function generateTonightPicks() {
+    renderTonightWatchlistPicks();
+    const container = document.getElementById('tonightFreshResults');
+    if (container) {
+        container.textContent = 'Finding fresh picks…';
+        container.className = 'grid grid-cols-1 gap-2';
+    }
+    const requestToken = ++tonightFreshLoadToken;
+    try {
+        const candidates = await generateTonightFreshPicks();
+        if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks(candidates);
+    } catch (error) {
+        if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks([]);
+    }
+}
+
+function openPickTonightModal() {
+    trackEvent('pick_tonight_used');
+    showModal('pickTonightModal');
+    generateTonightPicks();
+}
+
+function rerollTonightPicks() {
+    trackEvent('pick_tonight_used');
+    generateTonightPicks();
 }
 
 // Filter and render the active list using the saved grouping choices.

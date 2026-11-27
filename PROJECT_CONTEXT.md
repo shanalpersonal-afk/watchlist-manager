@@ -1,6 +1,15 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.21.0**
+**Current version: v2.21.2**
+
+### v2.21.2 Pick Tonight
+
+- **Root cause:** the previous Surprise Me control was a small, unlabeled 40px `🎲` icon inside the Library toolbar, making the feature easy to miss and limiting discoverability on mobile.
+- **Fix:** replaced it with a prominent labeled gradient `#pickTonightBtn` in `#libraryView` and added a hybrid `#pickTonightModal` bottom sheet.
+- Section A uses up to two random unwatched active-watchlist titles, prioritizing subscription and free platform matches. It is hidden when there are no unwatched titles.
+- Section B queries TMDB using the user's taste languages and genres, excludes watchlist and dismissed titles, and falls back to broad Discover results so fresh picks remain available.
+- Fresh cards include poster, title, year, rating, India OTT badge, trailer, and one-tap add controls. `#rerollTonightBtn` refreshes both sections and analytics is tracked for open and re-roll actions.
+- Current version: **v2.21.2**.
 
 ## 1. Project Vision
 
@@ -219,9 +228,12 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
 - Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
 - UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
+- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`.
+- Pick Tonight DOM IDs: `#pickTonightBtn`, `#pickTonightModal`, `#pickTonightBody`, `#tonightWatchlistSection`, `#tonightWatchlistResults`, `#tonightFreshResults`, `#rerollTonightBtn`, `#closePickTonightBtn`, `#closePickTonightBackdrop`.
 
 ## 5. Remaining Next Steps
 
+- **Known issues:** Taste Profile queries may be sparse for uncommon language/genre combinations, so Pick Tonight uses a broad TMDB Discover fallback and should continue to be tested with very small watchlists.
 - **v2.22.0 US + India Region Switcher.**
 - **v2.23.0 4-Friend Watch Circle.**
 

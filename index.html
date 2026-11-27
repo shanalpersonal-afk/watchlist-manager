@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.21.0</title>
+    <title>Watchlist Studio v2.21.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -91,7 +91,7 @@
                     <select id="activeListSelect" class="min-w-0 flex-1 truncate rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3 py-2 text-sm font-semibold"></select>
                     <button id="toggleSearchBtn" type="button" onclick="toggleSearchPanel()" aria-label="Search library" title="Search" aria-expanded="false" class="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-lg">🔍</button>
                     <button id="toggleFilterDrawerBtn" type="button" onclick="toggleFilterDrawer()" aria-label="Filter library" title="Filters" aria-expanded="false" class="relative h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-lg">🎛️<span id="libraryFilterDot" class="hidden absolute right-1 top-1 h-2 w-2 rounded-full bg-sky-500"></span></button>
-                    <button id="surpriseMeBtn" type="button" title="Surprise Me" aria-label="Surprise Me" class="h-10 w-10 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-lg">🎲</button>
+                    <button id="pickTonightBtn" type="button" title="Pick Tonight" aria-label="Pick Tonight" class="bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-bold text-xs px-3.5 py-2 min-h-11 rounded-xl shadow-sm flex items-center gap-1.5 hover:opacity-95 active:scale-95 transition-all whitespace-nowrap">🎲 <span>Pick Tonight</span></button>
                 </div>
                 <div id="sharedListBanner" class="hidden mt-2 flex items-center gap-2 overflow-hidden rounded-lg bg-sky-50 px-2 py-1.5 dark:bg-sky-950/40">
                     <p id="sharedListBannerText" class="min-w-0 flex-1 truncate text-xs font-semibold text-sky-800 dark:text-sky-200"></p>
@@ -266,7 +266,7 @@
 
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
-            <p class="mt-1">v2.21.0</p>
+            <p class="mt-1">v2.21.2</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
                 <summary class="cursor-pointer text-center">📱 How to Install as App</summary>
                 <ul class="mt-2 space-y-1">
@@ -281,6 +281,29 @@
             <button id="mobileNavAddBtn" type="button" onclick="switchView('add')" class="rounded-xl px-2 py-2 text-xs font-bold">➕ Add</button>
             <button id="mobileNavSharedBtn" type="button" class="rounded-xl px-2 py-2 text-xs font-bold">👥 Shared</button>
         </nav>
+    </div>
+
+    <div id="pickTonightModal" data-modal-lock class="hidden fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="pickTonightTitle">
+        <button id="closePickTonightBackdrop" type="button" class="absolute inset-0 h-full w-full cursor-default" aria-label="Close Pick Tonight"></button>
+        <div class="relative z-10 mt-auto flex max-h-[82vh] w-full md:max-w-lg md:max-h-[85vh] min-h-0 flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:my-auto md:rounded-2xl">
+            <div class="shrink-0 px-4 pt-2 md:pt-4">
+                <div class="mb-2 mx-auto h-1 w-10 rounded-full bg-slate-400/50 md:hidden"></div>
+                <div class="flex items-center justify-between"><h2 id="pickTonightTitle" class="text-base font-extrabold">🎲 What to Watch Tonight</h2><button id="closePickTonightBtn" type="button" aria-label="Close Pick Tonight" class="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button></div>
+            </div>
+            <div id="pickTonightBody" class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4" aria-live="polite">
+                <section id="tonightWatchlistSection" class="hidden">
+                    <h3 class="mb-2 text-sm font-bold">📌 From Your Watchlist</h3>
+                    <div id="tonightWatchlistResults" class="grid grid-cols-2 gap-2"></div>
+                </section>
+                <section>
+                    <h3 class="mb-2 text-sm font-bold">✨ Fresh For Your Taste</h3>
+                    <div id="tonightFreshResults" class="grid grid-cols-1 gap-2"><p class="text-xs text-slate-500">Finding fresh picks…</p></div>
+                </section>
+            </div>
+            <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+                <button id="rerollTonightBtn" type="button" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 py-3 font-bold text-white shadow-sm transition active:scale-[0.98]">🎲 Re-roll Picks</button>
+            </div>
+        </div>
     </div>
 
     <div id="detailPreviewModal" data-modal-lock class="hidden fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/60 p-0 md:items-center md:p-4" role="dialog" aria-modal="true" aria-labelledby="detailPreviewTitle">
