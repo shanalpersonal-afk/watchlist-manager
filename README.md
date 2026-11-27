@@ -14,7 +14,7 @@ Watchlist Studio is a mobile-first web app for discovering movies and TV shows, 
 - Use "Watchable Now" to find titles on your saved subscriptions
 - Create private or shared watchlists
 - Add titles in bulk or from social text
-- Share title links, preview trailers, and use Surprise Me
+- Share title links, preview trailers, and use Pick Tonight
 - Install as a standalone app on iPhone, Android, or desktop
 
 ## Technology

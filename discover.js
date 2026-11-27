@@ -705,7 +705,10 @@ function renderTrendingShelf(candidates, append = false) {
         dismiss.textContent = '✕';
         dismiss.setAttribute('aria-label', `Hide ${candidate.title}`);
         dismiss.className = 'absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/70 text-xs text-white/80 hover:bg-rose-600';
-        dismiss.addEventListener('click', event => { event.stopPropagation(); dismissRecommendation(candidate.id, candidate.title); });
+        dismiss.addEventListener('click', event => {
+            event.stopPropagation();
+            dismissRecommendation(candidate.id, candidate.title, candidate.mediaType, candidate.year);
+        });
         posterFrame.appendChild(dismiss);
         card.appendChild(posterFrame);
 

@@ -31,7 +31,7 @@ function logAppError(source, error) {
         db.collection('errorLogs').add({
             message,
             source: String(source || 'unknown'),
-            version: 'v2.21.0',
+            version: 'v2.21.3',
             userAgent: navigator.userAgent,
             uid: currentUser.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -118,6 +118,14 @@ function normalizeUserProfile(profile) {
         genres: Array.isArray(source.genres) ? [...new Set(source.genres.filter(value => Object.prototype.hasOwnProperty.call(TRENDING_GENRE_IDS, value)))] : [],
         dismissedIds: Array.isArray(source.dismissedIds) ? [...new Set(source.dismissedIds.map(String))] : [],
         dismissedTitles: Array.isArray(source.dismissedTitles) ? [...new Set(source.dismissedTitles.map(value => String(value || '').trim()).filter(Boolean))] : [],
+        dismissedItems: Array.isArray(source.dismissedItems) ? source.dismissedItems
+            .filter(item => item && item.id != null && (item.mediaType === 'movie' || item.mediaType === 'tv'))
+            .map(item => ({
+                id: String(item.id),
+                mediaType: item.mediaType,
+                title: String(item.title || '').trim(),
+                year: String(item.year || 'N/A').split('-')[0]
+            })) : [],
         hasCompletedTour: source.hasCompletedTour === true,
         hasCompletedTasteOnboarding: source.hasCompletedTasteOnboarding === true,
         tasteSeedMovies: Array.isArray(source.tasteSeedMovies) ? source.tasteSeedMovies.filter(seed => seed && seed.id && (seed.mediaType === 'movie' || seed.mediaType === 'tv')).map(seed => ({ id: seed.id, mediaType: seed.mediaType, title: String(seed.title || ''), poster: seed.poster || null })).slice(0, 20) : []
@@ -131,7 +139,7 @@ function getUserSubscriptions() {
 async function loadUserProfile() {
     if (!currentUser) return;
     const uid = currentUser.uid;
-    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
+    let localProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], dismissedItems: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
     try {
         localProfile = normalizeUserProfile(JSON.parse(localStorage.getItem(getUserProfileStorageKey(uid)) || '{}'));
     } catch (error) {
@@ -629,25 +637,40 @@ async function deleteItem(docId) {
     }
 }
 
-async function dismissRecommendation(tmdbId, title = 'Recommendation') {
+async function dismissRecommendation(tmdbId, title = 'Recommendation', mediaType = '', year = 'N/A') {
     if (!currentUser || userProfileUid !== currentUser.uid || tmdbId == null) return;
     const id = String(tmdbId);
     userProfile.dismissedIds = [...new Set([...(userProfile.dismissedIds || []), id])];
     const cleanTitle = String(title || '').trim();
     if (cleanTitle) userProfile.dismissedTitles = [...new Set([...(userProfile.dismissedTitles || []), cleanTitle])];
+    if (mediaType === 'movie' || mediaType === 'tv') {
+        const dismissedItems = Array.isArray(userProfile.dismissedItems) ? userProfile.dismissedItems : [];
+        userProfile.dismissedItems = [
+            ...dismissedItems.filter(item => !(String(item.id) === id && item.mediaType === mediaType)),
+            { id, mediaType, title: cleanTitle, year: String(year || 'N/A').split('-')[0] }
+        ];
+    }
     trendingCache.clear();
     document.querySelector(`#trendingShelf article[data-tmdb-id="${CSS.escape(id)}"]`)?.remove();
     displayedTrendingIds.delete(id);
     const count = document.getElementById('hiddenRecommendationsCount');
     if (count) count.textContent = String(userProfile.dismissedIds.length);
     await persistUserProfileSilently();
-    showToast(`Hidden ${title}.`, 'success', { label: 'Undo', onClick: () => undoDismissRecommendation(id, cleanTitle) });
+    showToast(`Hidden ${title}.`, 'success', { label: 'Undo', onClick: () => undoDismissRecommendation(id, cleanTitle, mediaType) });
 }
 
-async function undoDismissRecommendation(tmdbId, title = '') {
+async function undoDismissRecommendation(tmdbId, title = '', mediaType = '') {
     const id = String(tmdbId);
-    userProfile.dismissedIds = (userProfile.dismissedIds || []).filter(value => String(value) !== id);
-    if (title) userProfile.dismissedTitles = (userProfile.dismissedTitles || []).filter(value => value !== title);
+    const dismissedItems = Array.isArray(userProfile.dismissedItems) ? userProfile.dismissedItems : [];
+    userProfile.dismissedItems = dismissedItems.filter(item =>
+        !(String(item.id) === id && (!mediaType || item.mediaType === mediaType))
+    );
+    if (!userProfile.dismissedItems.some(item => String(item.id) === id)) {
+        userProfile.dismissedIds = (userProfile.dismissedIds || []).filter(value => String(value) !== id);
+    }
+    if (title && !userProfile.dismissedItems.some(item => item.title === title)) {
+        userProfile.dismissedTitles = (userProfile.dismissedTitles || []).filter(value => value !== title);
+    }
     trendingCache.clear();
     await persistUserProfileSilently();
     resetTrendingDiscover();
@@ -656,6 +679,7 @@ async function undoDismissRecommendation(tmdbId, title = '') {
 async function resetDismissedRecommendations() {
     userProfile.dismissedIds = [];
     userProfile.dismissedTitles = [];
+    userProfile.dismissedItems = [];
     const count = document.getElementById('hiddenRecommendationsCount');
     if (count) count.textContent = '0';
     trendingCache.clear();

@@ -161,6 +161,8 @@ async function endWatchlistTour(markCompleted = true, wasSkipped = false) {
 }
 
 const APP_UPDATES = [
+    { version: 'v2.21.3', date: '2026-11-27', title: 'Pick Tonight metadata fix', items: ['Normalized TMDB title, year, rating, poster, media type, and ID fields.', 'Kept Trailer and Add actions working with every Fresh For Your Taste card.', 'Added strict repository instructions for future browser-compatible changes.'] },
+    { version: 'v2.21.2', date: '2026-11-27', title: 'Pick Tonight hybrid recommendations', items: ['Added a prominent labeled Pick Tonight button in the Library toolbar.', 'Combined saved watchlist picks with fresh Taste Profile recommendations.', 'Added re-roll, trailers, India OTT badges, and one-tap add actions.'] },
     { version: 'v2.21.0', date: '2026-11-27', title: 'Surprise, trailers, and sharing', items: ['Pick a random title from your To Watch list.', 'Open trailers and share add-to-watchlist links from previews.', 'Track browser errors and key app events.'] },
     { version: 'v2.20.0', date: '2026-11-27', title: 'Modular browser app and Discover refresh', items: ['Split the plain JavaScript app into focused browser files.', 'Keep AI Picks cached across views and refresh them on demand.', 'Show more Hindi and regional language titles in fresh India Discover.'] },
     { version: 'v2.19.1', date: '2026-11-27', title: 'Taste Wizard and smarter AI picks', items: ['Choose language and genre poster steps with more titles and Load More.', 'Gemini weighs loved, saved, and dismissed titles separately.'] },

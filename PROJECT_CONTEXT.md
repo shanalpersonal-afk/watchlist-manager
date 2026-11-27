@@ -8,6 +8,9 @@
 - **Root cause:** Fresh For Your Taste cards could receive raw TMDB discover objects whose fields use `name`, `release_date`, `first_air_date`, `vote_average`, `poster_path`, `media_type`, and `id`.
 - **Fix:** added `normalizeTonightCandidate()` in `app.js` and normalize results before filtering and rendering. Cards now derive title, year, rating, poster, media type, and TMDB ID consistently.
 - The normalized `mediaType` and `id` are reused by `fetchTMDBTrailerUrl`, `fetchCandidateIndiaPlatforms`, and `saveCandidateToWatchlist`, keeping Trailer and Add actions functional.
+- Pick Tonight now logs rejected Taste Profile and India fallback requests, plus generation failures, using `console.warn`.
+- Candidate exclusions use typed `mediaType:id` identities or exact normalized `mediaType:title:year` keys. New dismissals persist this metadata as `dismissedItems`; older `dismissedIds` records do not contain a media type and are not used by Pick Tonight because that could hide a different title with a colliding ID.
+- When taste-filtered results are empty or fewer than two, Pick Tonight fills from popular India flatrate movie Discover pages. Cards are limited to candidates with a title, release year, rating, and poster.
 - Current version: **v2.21.3**.
 
 ### v2.21.2 Pick Tonight
@@ -236,7 +239,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
 - Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
 - UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
-- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`.
+- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`, `isTonightCandidateRenderable`.
 - Pick Tonight DOM IDs: `#pickTonightBtn`, `#pickTonightModal`, `#pickTonightBody`, `#tonightWatchlistSection`, `#tonightWatchlistResults`, `#tonightFreshResults`, `#rerollTonightBtn`, `#closePickTonightBtn`, `#closePickTonightBackdrop`.
 
 ## 5. Remaining Next Steps

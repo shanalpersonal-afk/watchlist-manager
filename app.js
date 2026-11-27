@@ -12,7 +12,7 @@ let unsubscribeSharedLists = null;
 let isCreatingList = false;
 let currentWatchlistItems = [];
 let currentUser = null;
-let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
+let userProfile = { subscriptions: [], languages: [], genres: [], dismissedIds: [], dismissedTitles: [], dismissedItems: [], hasCompletedTour: false, hasCompletedTasteOnboarding: false, tasteSeedMovies: [] };
 let userProfileUid = null;
 let userProfileLoadPromise = Promise.resolve();
 const selectedDocIds = new Set();
@@ -159,7 +159,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('resetDismissedRecommendationsBtn')?.addEventListener('click', resetDismissedRecommendations);
     document.getElementById('resetTasteOnboardingBtn')?.addEventListener('click', resetTasteOnboarding);
     document.getElementById('hideSuggestionBtn')?.addEventListener('click', () => {
-        if (activePreviewItem) dismissRecommendation(activePreviewItem.id || activePreviewItem.tmdbId, activePreviewItem.title);
+        if (activePreviewItem) dismissRecommendation(
+            activePreviewItem.id || activePreviewItem.tmdbId,
+            activePreviewItem.title,
+            activePreviewItem.mediaType || activePreviewItem.type,
+            activePreviewItem.year
+        );
     });
     document.getElementById('openWhatsNewBtn')?.addEventListener('click', () => { toggleAccountMenu(false); openWhatsNewModal(); });
     ['closeWhatsNewBtn', 'doneWhatsNewBtn', 'closeWhatsNewBackdrop'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('whatsNewModal')));
@@ -1265,16 +1270,20 @@ async function generateTonightFreshPicks() {
     const languages = shuffleTonightItems(profile.languages || []).slice(0, 2);
     const genres = shuffleTonightItems(profile.genres || []).slice(0, 2);
     const mediaTypes = ['movie', 'tv'];
-    const watchlistIds = new Set((Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [])
-        .map(item => String(item.tmdbId || item.id || '')).filter(Boolean));
-    const dismissedIds = new Set((profile.dismissedIds || []).map(String));
-    const dismissedTitles = new Set((profile.dismissedTitles || []).map(title => String(title).trim().toLocaleLowerCase()).filter(Boolean));
-    const watchlistTitles = new Set((Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [])
-        .map(item => String(item.title || '').trim().toLocaleLowerCase()).filter(Boolean));
+    const watchlistItems = Array.isArray(currentWatchlistItems) ? currentWatchlistItems : [];
+    const titleKey = item => `${String(item.mediaType || item.type || '').toLocaleLowerCase()}:${String(item.title || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase()}:${String(item.year || 'N/A').split('-')[0]}`;
+    const identityKey = item => `${String(item.mediaType || item.type || '').toLocaleLowerCase()}:${String(item.id || item.tmdbId || '')}`;
+    const watchlistIds = new Set(watchlistItems.map(identityKey).filter(key => !key.endsWith(':')));
+    const watchlistTitleYears = new Set(watchlistItems.map(titleKey).filter(key => !key.startsWith(':')));
+    // Legacy dismissedIds contain no media type, so only typed dismissal records are safe to match here.
+    const dismissedItems = Array.isArray(profile.dismissedItems) ? profile.dismissedItems : [];
+    const dismissedIds = new Set(dismissedItems.map(identityKey).filter(key => !key.endsWith(':')));
+    const dismissedTitleYears = new Set(dismissedItems.map(titleKey).filter(key => !key.startsWith(':')));
     const isExcluded = candidate => {
-        const id = String(candidate.id || '');
-        const title = String(candidate.title || '').trim().toLocaleLowerCase();
-        return watchlistIds.has(id) || dismissedIds.has(id) || watchlistTitles.has(title) || dismissedTitles.has(title);
+        const id = identityKey(candidate);
+        const titleYear = titleKey(candidate);
+        return watchlistIds.has(id) || watchlistTitleYears.has(titleYear) ||
+            dismissedIds.has(id) || dismissedTitleYears.has(titleYear);
     };
 
     const languageJobs = languages.length ? languages : ['All'];
@@ -1300,30 +1309,67 @@ async function generateTonightFreshPicks() {
         const data = await response.json();
         return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
     }));
+    settled.forEach((result, index) => {
+        if (result.status === 'rejected') console.warn('Pick Tonight taste query failed.', jobs[index], result.reason);
+    });
 
     let candidates = shuffleTonightItems(settled
         .filter(result => result.status === 'fulfilled')
         .flatMap(result => result.value)
         .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
-        .filter(candidate => candidate && candidate.title && !isExcluded(candidate)));
+        .filter(isTonightCandidateRenderable)
+        .filter(candidate => !isExcluded(candidate)));
     candidates = [...new Map(candidates.map(candidate =>
         [`${candidate.mediaType}:${candidate.id}`, candidate]
     ).values())].slice(0, 3);
 
-    // Broad fallback keeps the sheet useful if Taste Profile filters are sparse.
+    // Popular India streaming movies fill sparse or empty Taste Profile results.
     if (candidates.length < 2) {
-        const fallbackSettled = await Promise.allSettled(mediaTypes.map(async mediaType => {
-            const params = new URLSearchParams({ sort_by: 'popularity.desc', 'vote_count.gte': '10', page: String(1 + Math.floor(Math.random() * 3)) });
-            const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
-            if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
+        const fallbackPages = [1, 2, 3];
+        const fallbackSettled = await Promise.allSettled(fallbackPages.map(async page => {
+            const params = new URLSearchParams({
+                watch_region: 'IN',
+                with_watch_monetization_types: 'flatrate',
+                sort_by: 'popularity.desc',
+                'vote_count.gte': '10',
+                page: String(page)
+            });
+            const response = await fetch(buildTMDBUrl('/discover/movie', params));
+            if (!response.ok) throw new Error(`TMDB India movie fallback returned ${response.status}.`);
             const data = await response.json();
-            return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
+            return (data.results || []).map(result => normalizeTonightCandidate(result, 'movie'));
         }));
-        const fallback = fallbackSettled.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
-        candidates = [...new Map([...candidates, ...shuffleTonightItems(fallback).filter(candidate => !isExcluded(candidate))]
+        fallbackSettled.forEach((result, index) => {
+            if (result.status === 'rejected') console.warn('Pick Tonight India fallback query failed.', { page: fallbackPages[index] }, result.reason);
+        });
+        const fallback = fallbackSettled
+            .filter(result => result.status === 'fulfilled')
+            .flatMap(result => result.value)
+            .map(candidate => normalizeTonightCandidate(candidate, 'movie'))
+            .filter(isTonightCandidateRenderable)
+            .filter(candidate => !isExcluded(candidate));
+        candidates = [...new Map([...candidates, ...shuffleTonightItems(fallback)]
+            .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
+            .filter(isTonightCandidateRenderable)
             .map(candidate => [`${candidate.mediaType}:${candidate.id}`, candidate])).values()].slice(0, 3);
+        if (candidates.length < 2) console.warn('Pick Tonight could not find two eligible cards after the India streaming fallback.', { count: candidates.length });
     }
-    return candidates.slice(0, 3);
+    return candidates.map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
+        .filter(isTonightCandidateRenderable)
+        .slice(0, 3);
+}
+
+function isTonightCandidateRenderable(candidate) {
+    return Boolean(
+        candidate?.id &&
+        candidate.title &&
+        candidate.title !== 'Untitled' &&
+        candidate.year &&
+        candidate.year !== 'N/A' &&
+        candidate.rating &&
+        candidate.rating !== 'N/A' &&
+        candidate.poster
+    );
 }
 
 async function renderTonightFreshPicks(candidates) {
@@ -1421,6 +1467,7 @@ async function generateTonightPicks() {
         const candidates = await generateTonightFreshPicks();
         if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks(candidates);
     } catch (error) {
+        console.warn('Could not generate Pick Tonight recommendations.', error);
         if (requestToken === tonightFreshLoadToken) await renderTonightFreshPicks([]);
     }
 }
