@@ -90,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-modal-lock]').forEach(modal => modalLockObserver.observe(modal, { attributes: true, attributeFilter: ['class'] }));
     syncModalBodyScroll();
     document.getElementById('accountMenuBtn')?.addEventListener('click', () => toggleAccountMenu());
+    document.getElementById('surpriseMeBtn')?.addEventListener('click', surpriseMe);
+    document.getElementById('detailPreviewShareBtn')?.addEventListener('click', shareActivePreview);
     
     const googleBtn = document.getElementById('googleSignInBtn');
     if (googleBtn) googleBtn.addEventListener('click', loginWithGoogle);
@@ -102,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tourNextBtn = document.getElementById('tourNextBtn');
     if (tourNextBtn) tourNextBtn.addEventListener('click', advanceWatchlistTour);
     const tourSkipBtn = document.getElementById('tourSkipBtn');
-    if (tourSkipBtn) tourSkipBtn.addEventListener('click', endWatchlistTour);
+    if (tourSkipBtn) tourSkipBtn.addEventListener('click', () => endWatchlistTour(true, true));
     document.getElementById('candidateSearchBtn')?.addEventListener('click', searchCandidateInput);
     document.getElementById('clearCandidateSearchBtn')?.addEventListener('click', clearCandidateSearch);
     document.getElementById('candidateSearchInput')?.addEventListener('input', event => {
@@ -141,8 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
         discoverMode = 'ai';
         updateDiscoverFilterUI();
     });
-    document.getElementById('askAiBtn')?.addEventListener('click', () => loadAIPicksRecommendations(false));
-    document.getElementById('refreshAiPicksBtn')?.addEventListener('click', () => loadAIPicksRecommendations(true));
+    document.getElementById('askAiBtn')?.addEventListener('click', () => { trackEvent('ai_picks_requested'); loadAIPicksRecommendations(false); });
+    document.getElementById('refreshAiPicksBtn')?.addEventListener('click', () => { trackEvent('ai_picks_requested'); loadAIPicksRecommendations(true); });
     ['closeTrendingFiltersBtn', 'closeTrendingFiltersBackdrop', 'doneTrendingFiltersBtn'].forEach(id => document.getElementById(id)?.addEventListener('click', () => hideModal('discoverFilterSheet')));
     document.getElementById('clearDiscoverFiltersBtn')?.addEventListener('click', () => applyDiscoverPreset('fresh'));
     document.querySelectorAll('[data-quick-scope="library"]').forEach(button => button.addEventListener('click', () => toggleQuickFilterPill(button)));
@@ -227,50 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', positionTourTooltip);
     window.addEventListener('scroll', positionTourTooltip, { passive: true });
 
-    if (auth) {
-        auth.onAuthStateChanged(user => {
-            const splash = document.getElementById('splashScreen');
-            const dashboard = document.getElementById('appDashboard');
-            
-            if (user) {
-                currentUser = user;
-                if (splash) splash.classList.add('hidden');
-                if (dashboard) dashboard.classList.remove('hidden');
-
-                document.getElementById('userNameDisplay').textContent = user.displayName || user.email;
-                if (user.photoURL) document.getElementById('userAvatar').src = user.photoURL;
-
-                setupFirebaseListener();
-                loadSharedLists();
-                const joinCode = new URLSearchParams(window.location.search).get('join');
-                if (joinCode) {
-                    const cleanUrl = new URL(window.location.href);
-                    cleanUrl.searchParams.delete('join');
-                    window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
-                    joinSharedList(joinCode);
-                }
-            } else {
-                currentUser = null;
-                if (unsubscribeWatchlist) {
-                    unsubscribeWatchlist();
-                    unsubscribeWatchlist = null;
-                }
-                if (unsubscribeSharedLists) {
-                    unsubscribeSharedLists();
-                    unsubscribeSharedLists = null;
-                }
-                userSharedLists = [];
-                activeListId = 'personal';
-                renderSharedLists();
-                updateActiveListControls();
-                currentWatchlistItems = [];
-                selectedDocIds.clear();
-                renderWatchlist();
-                if (splash) splash.classList.remove('hidden');
-                if (dashboard) dashboard.classList.add('hidden');
-            }
-        });
-    }
+    initializeAuthStateListener();
 });
 
 function switchView(viewName) {
@@ -972,6 +931,19 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
     const aiReason = document.getElementById('detailPreviewAIReason');
     const action = document.getElementById('detailPreviewActionBtn');
     const manageActions = document.getElementById('detailPreviewManageActions');
+    const trailerButton = document.getElementById('detailPreviewTrailerBtn');
+    const shareButton = document.getElementById('detailPreviewShareBtn');
+    const mediaType = item.mediaType || item.type;
+    const tmdbId = item.id || item.tmdbId;
+    const canShareTitle = Boolean(tmdbId && (mediaType === 'movie' || mediaType === 'tv'));
+    const surpriseBadge = document.getElementById('detailPreviewSurpriseBadge');
+    surpriseBadge?.classList.toggle('hidden', !item.tonightPick);
+    trailerButton?.classList.toggle('hidden', !canShareTitle);
+    shareButton?.classList.toggle('hidden', !canShareTitle);
+    if (canShareTitle) {
+        trailerButton.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${item.title || ''} trailer`)}`;
+        loadPreviewTrailer(item);
+    }
     document.getElementById('detailPreviewCandidateActions')?.classList.toggle('hidden', isSaved || !(item.id || item.tmdbId));
     const imageUrl = item.poster || null;
     poster.classList.toggle('hidden', !imageUrl);
@@ -1005,6 +977,59 @@ async function openDetailPreview(item, isSaved = Boolean(item?.docId)) {
             renderProviders();
         }
     }
+}
+
+// Load a trailer only when its title preview is opened.
+async function loadPreviewTrailer(item) {
+    const mediaType = item.mediaType || item.type;
+    const tmdbId = item.id || item.tmdbId;
+    if (!tmdbId || !['movie', 'tv'].includes(mediaType)) return;
+    const trailerUrl = await fetchTMDBTrailerUrl(mediaType, tmdbId);
+    const button = document.getElementById('detailPreviewTrailerBtn');
+    if (activePreviewItem === item && button) button.href = trailerUrl;
+}
+
+// Share this title as a link that opens its add-to-watchlist preview.
+async function shareActivePreview() {
+    const item = activePreviewItem;
+    if (!item) return;
+    const mediaType = item.mediaType || item.type;
+    const tmdbId = item.id || item.tmdbId;
+    if (!tmdbId || !['movie', 'tv'].includes(mediaType)) return;
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.hash = '';
+    shareUrl.searchParams.set('add', `${mediaType}:${tmdbId}`);
+    try {
+        if (navigator.share) await navigator.share({ title: item.title || 'Watchlist title', text: `Add ${item.title || 'this title'} to your watchlist`, url: shareUrl.href });
+        else await copyShareUrl(shareUrl.href);
+        trackEvent('title_shared', { media_type: mediaType });
+    } catch (error) {
+        if (error?.name === 'AbortError') return;
+        try {
+            await copyShareUrl(shareUrl.href);
+            trackEvent('title_shared', { media_type: mediaType });
+        } catch (copyError) {
+            showToast('Could not copy the share link.', 'error');
+        }
+    }
+}
+
+// Copy a link with the Clipboard API and a browser textarea fallback.
+async function copyShareUrl(url) {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+    else {
+        const field = document.createElement('textarea');
+        field.value = url;
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        if (!copied) throw new Error('Clipboard copy failed.');
+    }
+    showToast('Share link copied!', 'success');
 }
 
 // Close the title preview sheet.
@@ -1111,17 +1136,46 @@ function renderBulkReviewContainer() {
     updateBulkStatus();
 }
 
-// Filter and render the active list using the saved grouping choices.
-function renderWatchlist() {
-    const container = document.getElementById('watchlistDisplay');
-    if (!container) return;
-
+// Apply the same search, filters, watchability, and sort as the Library view.
+function getFilteredLibraryItems() {
     const searchQuery = document.getElementById('searchQuery')?.value.toLowerCase().trim() || '';
     const filterTypes = getMultiFilterValues('library', 'type');
     const filterPlatforms = getMultiFilterValues('library', 'platform').map(normalizePlatformName);
     const filterGenres = getMultiFilterValues('library', 'genre');
     const filterLanguages = getMultiFilterValues('library', 'language');
     const sortBy = document.getElementById('sortBy')?.value || 'default';
+    let items = [...getWatchlist()];
+    if (searchQuery) items = items.filter(item => String(item.title || '').toLowerCase().includes(searchQuery));
+    if (filterTypes.length) items = items.filter(item => filterTypes.includes(item.type));
+    if (filterPlatforms.length) items = items.filter(item => getItemPlatforms(item).map(normalizePlatformName).some(platform => filterPlatforms.includes(platform)));
+    if (filterGenres.length) items = items.filter(item => filterGenres.includes(item.genre));
+    if (filterLanguages.length) items = items.filter(item => filterLanguages.includes(getItemLanguage(item)));
+    if (onlyWatchableNow) {
+        const subscriptions = getUserSubscriptions();
+        if (!subscriptions.length) { onlyWatchableNow = false; updateWatchableNowButton(); }
+        else items = items.filter(item => itemIsOnSubscribedOTT(item, subscriptions));
+    }
+    if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
+    if (sortBy === 'title-asc') items.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    if (sortBy === 'title-desc') items.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+    return items;
+}
+
+// Open a random title from the filtered To Watch list, with an all-list fallback.
+function surpriseMe() {
+    const filtered = getFilteredLibraryItems().filter(item => !item.watched);
+    const unwatched = filtered.length ? filtered : currentWatchlistItems.filter(item => !item.watched);
+    if (!unwatched.length) { showToast('No To Watch titles are available yet.', 'info'); return; }
+    const item = unwatched[Math.floor(Math.random() * unwatched.length)];
+    trackEvent('surprise_me_used');
+    openDetailPreview({ ...item, mediaType: item.mediaType || item.type, tonightPick: true }, true);
+}
+
+// Filter and render the active list using the saved grouping choices.
+function renderWatchlist() {
+    const container = document.getElementById('watchlistDisplay');
+    if (!container) return;
+
     const groupBy = document.getElementById('groupBySelect')?.value || 'none';
     const tuckWatched = document.getElementById('tuckWatchedToggle')?.checked ?? true;
 
@@ -1137,26 +1191,7 @@ function renderWatchlist() {
         updateBatchActionUI();
         return;
     }
-    let items = getWatchlist();
-
-    if (searchQuery !== '') items = items.filter(i => i.title.toLowerCase().includes(searchQuery));
-    if (filterTypes.length) items = items.filter(item => filterTypes.includes(item.type));
-    if (filterPlatforms.length) items = items.filter(item => getItemPlatforms(item).map(normalizePlatformName).some(platform => filterPlatforms.includes(platform)));
-    if (filterGenres.length) items = items.filter(item => filterGenres.includes(item.genre));
-    if (filterLanguages.length) items = items.filter(item => filterLanguages.includes(getItemLanguage(item)));
-    if (onlyWatchableNow) {
-        const subscriptions = getUserSubscriptions();
-        if (subscriptions.length === 0) {
-            onlyWatchableNow = false;
-            updateWatchableNowButton();
-        } else {
-            items = items.filter(item => itemIsOnSubscribedOTT(item, subscriptions));
-        }
-    }
-
-    if (sortBy === 'rating-desc') items.sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0));
-    if (sortBy === 'title-asc') items.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-    if (sortBy === 'title-desc') items.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+    const items = getFilteredLibraryItems();
 
     if (items.length === 0) {
         container.innerHTML = `<div class="text-center py-12 text-slate-400 font-medium">No matching titles found.</div>`;

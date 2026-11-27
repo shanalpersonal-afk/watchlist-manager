@@ -178,6 +178,43 @@ async function fetchTMDBDetails(queryTitle) {
     return { valid: false, error: `Could not find "${cleanTitle}".` };
 }
 
+// Find a YouTube trailer or teaser for a title, with a useful search fallback.
+async function fetchTMDBTrailerUrl(mediaType, tmdbId) {
+    const type = mediaType === 'tv' ? 'tv' : 'movie';
+    const fallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${type} ${tmdbId} trailer`)}`;
+    try {
+        const response = await fetch(buildTMDBUrl(`/${type}/${encodeURIComponent(tmdbId)}/videos`));
+        if (!response.ok) return fallbackUrl;
+        const payload = await response.json();
+        const video = (payload.results || []).find(result => result.site === 'YouTube' && ['Trailer', 'Teaser'].includes(result.type) && result.key);
+        return video ? `https://www.youtube.com/watch?v=${encodeURIComponent(video.key)}` : fallbackUrl;
+    } catch (error) {
+        return fallbackUrl;
+    }
+}
+
+// Fetch a shared title by TMDB ID and shape it for the preview sheet.
+async function fetchTMDBTitleById(mediaType, tmdbId) {
+    const type = mediaType === 'tv' ? 'tv' : 'movie';
+    const response = await fetch(buildTMDBUrl(`/${type}/${encodeURIComponent(tmdbId)}`));
+    if (!response.ok) throw new Error('Shared title could not be loaded.');
+    const result = await response.json();
+    const genreId = result.genres?.[0]?.id;
+    const languageCode = result.original_language;
+    return {
+        id: result.id,
+        mediaType: type,
+        title: result.title || result.name || 'Untitled',
+        year: (result.release_date || result.first_air_date || '').split('-')[0] || 'N/A',
+        rating: result.vote_average ? Number(result.vote_average).toFixed(1) : 'N/A',
+        language: languageCode ? (LANGUAGE_NAMES[languageCode] || languageCode.toUpperCase()) : 'Unknown Language',
+        genre: genreId ? (TMDB_GENRES[genreId] || 'General') : 'General',
+        poster: result.poster_path ? `https://image.tmdb.org/t/p/w200${result.poster_path}` : null,
+        overview: result.overview || '',
+        popularity: result.popularity || 0
+    };
+}
+
 function extractTitlesFromSocialText(rawText) {
     const titles = [];
     const seenTitles = new Set();

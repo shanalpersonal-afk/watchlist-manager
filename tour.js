@@ -124,7 +124,7 @@ function advanceWatchlistTour() {
     showWatchlistTourStep();
 }
 
-async function endWatchlistTour(markCompleted = true) {
+async function endWatchlistTour(markCompleted = true, wasSkipped = false) {
     if (tourTarget && tourOriginalStyles) {
         Object.assign(tourTarget.style, tourOriginalStyles);
     }
@@ -149,6 +149,7 @@ async function endWatchlistTour(markCompleted = true) {
     tourOpenedBulkPanel = false;
     tourOpenedFilterDrawer = false;
     tourStartingView = null;
+    if (markCompleted) trackEvent(wasSkipped ? 'tour_skipped' : 'tour_completed');
     if (markCompleted && currentUser && userProfileUid === currentUser.uid) {
         userProfile.hasCompletedTour = true;
         try { localStorage.setItem(`watchlist_tour_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep tour completion in the profile. */ }
@@ -160,6 +161,7 @@ async function endWatchlistTour(markCompleted = true) {
 }
 
 const APP_UPDATES = [
+    { version: 'v2.21.0', date: '2026-11-27', title: 'Surprise, trailers, and sharing', items: ['Pick a random title from your To Watch list.', 'Open trailers and share add-to-watchlist links from previews.', 'Track browser errors and key app events.'] },
     { version: 'v2.20.0', date: '2026-11-27', title: 'Modular browser app and Discover refresh', items: ['Split the plain JavaScript app into focused browser files.', 'Keep AI Picks cached across views and refresh them on demand.', 'Show more Hindi and regional language titles in fresh India Discover.'] },
     { version: 'v2.19.1', date: '2026-11-27', title: 'Taste Wizard and smarter AI picks', items: ['Choose language and genre poster steps with more titles and Load More.', 'Gemini weighs loved, saved, and dismissed titles separately.'] },
     { version: 'v2.19.0', date: '2026-11-27', title: 'AI Picks', items: ['Ask Gemini for movie and TV recommendations based on your taste, subscriptions, and optional mood.', 'AI titles are matched through TMDB so India OTT details and quick add actions remain available.'] },

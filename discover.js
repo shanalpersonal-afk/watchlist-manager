@@ -324,6 +324,7 @@ async function saveTasteOnboarding() {
     userProfile.genres = [...tasteSelectedGenres];
     userProfile.tasteSeedMovies = [...tasteSelectedSeeds.values()].slice(0, 20);
     userProfile.hasCompletedTasteOnboarding = true;
+    trackEvent('taste_wizard_completed');
     try { localStorage.setItem(`watchlist_taste_done_${currentUser.uid}`, 'true'); } catch (error) { /* Keep completion in the profile. */ }
     await persistUserProfileSilently();
     hideModal('tasteOnboardingModal');
@@ -519,7 +520,7 @@ async function loadTrendingDiscover() {
         if (freshnessNote) { freshnessNote.textContent = ''; freshnessNote.classList.add('hidden'); }
         let widenedForResults = false;
         const queryJobs = mediaTypes.flatMap(mediaType => languages.map(languageCode => ({ mediaType, languageCode })));
-        const resultSets = await Promise.all(queryJobs.map(async ({ mediaType, languageCode }) => {
+        const settledResultSets = await Promise.allSettled(queryJobs.map(async ({ mediaType, languageCode }) => {
             const fetchWindow = async months => {
                 const params = new URLSearchParams({
                     watch_region: 'IN', with_watch_monetization_types: 'flatrate',
@@ -553,6 +554,9 @@ async function loadTrendingDiscover() {
             }
             return { languageCode, candidates };
         }));
+        const resultSets = settledResultSets.filter(result => result.status === 'fulfilled').map(result => result.value);
+        settledResultSets.filter(result => result.status === 'rejected').forEach(result => console.warn('A Discover media query failed.', result.reason));
+        if (!resultSets.length) throw new Error('All India Discover queries failed.');
         if (widenedForResults && freshnessNote) {
             freshnessNote.textContent = 'Expanded to last 12 months for more results';
             freshnessNote.classList.remove('hidden');

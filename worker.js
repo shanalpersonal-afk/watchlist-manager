@@ -48,7 +48,8 @@ export default {
             return jsonResponse({ error: 'Only GET requests are supported.' }, 405, origin);
         }
 
-        const allowedPath = /^\/3\/(search|discover|watch|movie|tv)\//.test(requestUrl.pathname);
+        const videoPath = /^\/3\/(movie|tv)\/\d+\/videos$/.test(requestUrl.pathname);
+        const allowedPath = videoPath || /^\/3\/(search|discover|watch|movie|tv)\//.test(requestUrl.pathname);
         if (!allowedPath) {
             return jsonResponse({ error: 'TMDB endpoint is not allowed.' }, 403, origin);
         }
@@ -64,7 +65,7 @@ export default {
         upstreamUrl.searchParams.set('api_key', env.TMDB_API_KEY);
 
         try {
-            const upstreamResponse = await fetch(upstreamUrl.toString());
+            const upstreamResponse = await fetchWithRetry(upstreamUrl.toString());
             const body = await upstreamResponse.text();
             const headers = new Headers({
                 'Content-Type': upstreamResponse.headers.get('Content-Type') || 'application/json; charset=utf-8',
@@ -79,6 +80,20 @@ export default {
         }
     }
 };
+
+// Retry transient TMDB gateway failures once after a short pause.
+async function fetchWithRetry(url, options = {}) {
+    const retryableStatuses = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525]);
+    try {
+        const response = await fetch(url, options);
+        if (!retryableStatuses.has(response.status)) return response;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        return fetch(url, options);
+    } catch (error) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        return fetch(url, options);
+    }
+}
 
 // Ask Gemini for balanced picks using positive, saved, and negative taste signals.
 async function handleAiRecommendations(request, env, origin) {

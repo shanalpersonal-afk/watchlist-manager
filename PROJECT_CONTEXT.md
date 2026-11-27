@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.20.0**
+**Current version: v2.21.0**
 
 ## 1. Project Vision
 
@@ -18,7 +18,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 
 `config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. The page loads classic scripts in this order: `config.js` → `api.js` → `store.js` → `discover.js` → `tour.js` → `app.js`. The code stays in vanilla browser JavaScript with no modules, Node.js, or bundler; the TMDB API key is a Worker secret.
 
-## 3. Completed Features Through v2.20.0
+## 3. Completed Features Through v2.21.0
 
 ### v2.19.0 AI Curator
 
@@ -38,7 +38,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - AI Picks are cached in memory using mood, loved titles, and dismissed titles as the cache signature. The refresh button clears the cache and requests fresh Gemini picks.
 - India Discover uses lower vote thresholds for Hindi and regional Indian languages, date windows without the theatrical release filter, and widens sparse six-month queries to twelve months.
 - Current version is **v2.20.0**.
-- Remaining roadmap: **🎲 Pick For Me Tonight**, **▶ Watch Trailer**, **📤 1-Tap Share (`?add=...`)**, and **4-Friend Watch Circle**.
+- At v2.20.0, the next planned items were **🎲 Pick For Me Tonight**, **▶ Watch Trailer**, **📤 1-Tap Share (`?add=...`)**, and **4-Friend Watch Circle**.
 
 ### Updated file structure
 
@@ -49,7 +49,26 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - `discover.js`: Discover, AI Picks caching, and taste onboarding.
 - `tour.js`: guided tour and What's New release notes.
 - `app.js`: shared browser state, UI helpers, filtering, rendering, and DOM startup.
-- `worker.js`: Cloudflare Worker reference; unchanged.
+- `worker.js`: Cloudflare Worker reference, including TMDB transient-error retries.
+
+### v2.21.0 Reliability, analytics, Surprise Me, and sharing
+
+- Added one retry after 250 ms for transient TMDB Worker network and gateway failures. Video endpoints support movie and TV trailer lookups.
+- Discover movie and TV query results settle independently so one transient failure does not drop results from the other media type.
+- Added optional Firebase Analytics events and signed-in `errorLogs` capture, capped at five entries per browser session.
+- Added 🎲 Surprise Me for filtered To Watch items, trailer and share actions in title previews, and sign-in handling for `?add=movie:ID` / `?add=tv:ID` links.
+- Added the account menu feedback link and deleted unused `style.css`.
+- Current version is **v2.21.0**.
+- Remaining roadmap: **v2.22.0 US + India Region Switcher** and **v2.23.0 4-Friend Watch Circle**.
+
+### New functions
+
+- `fetchWithRetry()` retries transient TMDB Worker failures once.
+- `fetchTMDBTrailerUrl()` and `fetchTMDBTitleById()` support trailers and shared title links.
+- `trackEvent()` and `logAppError()` wrap analytics and browser error logging.
+- `initializeAuthStateListener()` and `openIncomingAddPreview()` preserve the sign-in gate and resolve shared title links.
+- `getFilteredLibraryItems()` and `surpriseMe()` choose a random filtered To Watch title.
+- `loadPreviewTrailer()`, `shareActivePreview()`, and `copyShareUrl()` power trailer and share actions.
 
 ## Previous release notes
 
@@ -183,32 +202,29 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 ### Files
 
 - `config.js` — `window.APP_CONFIG` Firebase configuration and the Cloudflare Worker URL; it contains no TMDB API key.
-- `worker.js` — Cloudflare Worker source/reference that keeps the TMDB API key server-side.
+- `worker.js` — Cloudflare Worker source; keeps the TMDB API key server-side and retries transient TMDB failures.
 - `manifest.json` — installable web app name, launch URL, standalone display mode, and colors.
-- `index.html` — splash, dashboard views, controls, discovery panel, profile preferences modal, and script loading order.
-- `app.js` — auth/listener lifecycle, candidate and discovery workflows, rendering, local preferences, and Firestore mutations.
-- `style.css` — legacy stylesheet; not loaded or used by the current app.
-- v2.15.1 UI helper IDs: `#groupBySelect`, `#tuckWatchedToggle`, and `#sharedListBanner`.
+- `index.html` — splash, dashboard views, controls, modals, feedback link, and ordered classic scripts.
+- `api.js` — TMDB URL and details helpers, title searches, trailers, platform aliases, and India provider lookups.
+- `store.js` — Firebase initialization, auth listener, user profile, shared lists, analytics, errors, and watchlist mutations.
+- `discover.js` — India discovery, taste wizard, and in-memory AI Picks cache.
+- `tour.js` — guided tour and What's New release history.
+- `app.js` — global UI state, event wiring, filters, modal previews, Library rendering, and bulk import.
+- `style.css` — removed in v2.21.0 because the app does not use it.
 
-### Key functions in `app.js`
+### Key functions by file
 
-- Views and tour: `switchView`, `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`.
-- User data: `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `persistUserProfileSilently`, `applyProfileDefaultsToDiscover`, `openProfileModal`, `closeProfileModal`, `getUserSubscriptions`, `toggleWatchableNow`, `itemIsOnSubscribedOTT`.
-- Library controls and rendering: `toggleSearchPanel`, `toggleFilterDrawer`, `toggleManageMode`, `saveGroupingPreferencesAndRender`, `renderPillFilterGroup`, `clearAllLibraryFilters`, `getItemLanguage`, `getGroupKey`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`.
-- TMDB candidate flow: `fetchTMDBDetails`, `searchTMDBCandidates`, `isAlreadyInWatchlist`, `saveCandidateToWatchlist`, `fetchIndiaProviders`, `renderCandidateResults`, `searchCandidateInput`, `openDetailPreview`, `showToast`.
-- Taste onboarding: `openTasteOnboardingModal`, `resetTasteOnboarding`, `saveTasteOnboarding`, `completeTasteOnboarding`, `renderTasteTitleGrid`.
-- Discovery: `buildTMDBUrl`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`, `formatTrendingDate`, `getMultiFilterValues`, `setMultiFilterValues`, `initMultiSelectFilters`, `applyDiscoverPreset`, `resetTrendingDiscover`, `loadMoreTrending`, `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `mapTrendingResult`, `renderTrendingShelf`, `dismissRecommendation`, `undoDismissRecommendation`, `resetDismissedRecommendations`.
-- Release notes: `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`, `updateWhatsNewDot`.
-- Bulk and batch actions: `extractTitlesFromSocialText`, `handleExtractSocialTitles`, `bulkUploadItems`, `renderBulkReviewContainer`, `deleteSelected`, `deleteAll`.
-- Metadata and item actions: `refreshMetadata`, `toggleWatched`, `deleteItem`.
+- API: `buildTMDBUrl`, `searchTMDBCandidates`, `fetchTMDBDetails`, `fetchTMDBTrailerUrl`, `fetchTMDBTitleById`, `fetchIndiaWatchProviderMap`, `fetchCandidateIndiaPlatforms`.
+- Store: `initializeAuthStateListener`, `setupFirebaseListener`, `loadUserProfile`, `saveUserProfile`, `saveCandidateToWatchlist`, `joinSharedList`, `trackEvent`, `logAppError`, `openIncomingAddPreview`.
+- Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
+- Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
+- UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
 
 ## 5. Remaining Next Steps
 
-- **4-Friend Watch Circle:** ratings and per-person `watchedBy` tracking.
-- Add **JSON/CSV Export and Import** for backups and migration.
-- Add OMDb IMDb and Rotten Tomatoes scores.
+- **v2.22.0 US + India Region Switcher.**
+- **v2.23.0 4-Friend Watch Circle.**
 
-These items form the remaining v3.0.0 roadmap.
 
 ## 6. Working Rules
 

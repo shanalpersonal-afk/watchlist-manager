@@ -6,6 +6,105 @@ if (typeof firebase !== 'undefined' && firebaseConfig && firebase.apps.length ==
 const firebaseReady = typeof firebase !== 'undefined' && firebase.apps.length > 0;
 const db = firebaseReady ? firebase.firestore() : null;
 const auth = firebaseReady ? firebase.auth() : null;
+let analytics = null;
+let appErrorLogsThisSession = 0;
+const APP_ERROR_SESSION_KEY = 'watchlist_app_error_count_v2';
+try { appErrorLogsThisSession = Number(sessionStorage.getItem(APP_ERROR_SESSION_KEY)) || 0; } catch (error) { /* Keep the in-memory cap if session storage is blocked. */ }
+try {
+    if (firebaseReady && firebase.analytics && firebaseConfig?.measurementId) analytics = firebase.analytics();
+} catch (error) {
+    analytics = null;
+}
+
+// Send a browser analytics event without interrupting the app if analytics is unavailable.
+function trackEvent(eventName, params = {}) {
+    try { analytics?.logEvent(eventName, params); } catch (error) { /* Analytics is optional. */ }
+}
+
+// Save up to five signed-in browser errors per page session for troubleshooting.
+function logAppError(source, error) {
+    if (!currentUser || !db || appErrorLogsThisSession >= 5) return;
+    appErrorLogsThisSession += 1;
+    try { sessionStorage.setItem(APP_ERROR_SESSION_KEY, String(appErrorLogsThisSession)); } catch (storageError) { /* Keep the in-memory cap for this page. */ }
+    const message = String(error?.message || error?.reason?.message || error?.reason || error || 'Unknown browser error');
+    try {
+        db.collection('errorLogs').add({
+            message,
+            source: String(source || 'unknown'),
+            version: 'v2.21.0',
+            userAgent: navigator.userAgent,
+            uid: currentUser.uid,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(() => { /* Error logging must never interrupt the app. */ });
+    } catch (loggingError) {
+        /* Ignore logging failures so the original browser error stays primary. */
+    }
+}
+
+window.addEventListener('error', event => logAppError('window.error', event.error || event.message));
+window.addEventListener('unhandledrejection', event => logAppError('unhandledrejection', event.reason));
+
+// Keep the existing Google sign-in gate and handle shared list and title links after sign-in.
+function initializeAuthStateListener() {
+    if (!auth) return;
+    auth.onAuthStateChanged(user => {
+        const splash = document.getElementById('splashScreen');
+        const dashboard = document.getElementById('appDashboard');
+        if (user) {
+            currentUser = user;
+            if (splash) splash.classList.add('hidden');
+            if (dashboard) dashboard.classList.remove('hidden');
+            document.getElementById('userNameDisplay').textContent = user.displayName || user.email;
+            if (user.photoURL) document.getElementById('userAvatar').src = user.photoURL;
+            setupFirebaseListener();
+            loadSharedLists();
+            const params = new URLSearchParams(window.location.search);
+            const addCode = params.get('add');
+            if (addCode) {
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('add');
+                window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+                openIncomingAddPreview(addCode);
+            }
+            const joinCode = new URLSearchParams(window.location.search).get('join');
+            if (joinCode) {
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('join');
+                window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+                joinSharedList(joinCode);
+            }
+        } else {
+            currentUser = null;
+            if (unsubscribeWatchlist) { unsubscribeWatchlist(); unsubscribeWatchlist = null; }
+            if (unsubscribeSharedLists) { unsubscribeSharedLists(); unsubscribeSharedLists = null; }
+            userSharedLists = [];
+            activeListId = 'personal';
+            renderSharedLists();
+            updateActiveListControls();
+            currentWatchlistItems = [];
+            selectedDocIds.clear();
+            renderWatchlist();
+            if (splash) splash.classList.remove('hidden');
+            if (dashboard) dashboard.classList.add('hidden');
+        }
+    });
+}
+
+// Resolve a shared title link and open the normal add-to-watchlist preview.
+async function openIncomingAddPreview(value) {
+    const match = /^(movie|tv):(\d+)$/.exec(String(value || ''));
+    if (!match) { showToast('This shared title link is not valid.', 'error'); return; }
+    try {
+        const candidate = await fetchTMDBTitleById(match[1], match[2]);
+        const providers = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+        candidate.platforms = providers.platforms;
+        candidate.freePlatforms = providers.freePlatforms;
+        candidate.platform = providers.platform;
+        openDetailPreview(candidate, false);
+    } catch (error) {
+        showToast('Could not open the shared title.', 'error');
+    }
+}
 
 function getUserProfileStorageKey(uid = currentUser?.uid) {
     return `watchlist_profile_${uid || 'guest'}`;
@@ -239,6 +338,7 @@ async function joinSharedList(code) {
         renderSharedLists();
         document.getElementById('joinInviteCodeInput').value = '';
         if (status) status.textContent = `Joined ${listDoc.data().name || 'shared list'}.`;
+        trackEvent('shared_list_joined', { list_id: listDoc.id });
         switchActiveList(listDoc.id);
     } catch (error) {
         console.error('Could not join shared list.', error);
@@ -457,6 +557,7 @@ async function saveCandidateToWatchlist(candidate, button = null) {
             userId: user.uid,
             ...(activeListId !== 'personal' ? { listId: activeListId } : {})
         });
+        trackEvent('title_added', { media_type: candidate.mediaType });
         if (button) button.textContent = '✓ Added';
         return true;
     } catch (error) {
