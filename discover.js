@@ -196,6 +196,12 @@ function renderTasteWizard() {
         const pair = tasteSteps[tasteStepIndex - 1];
         const header = document.getElementById('tasteStepHeader');
         if (header) header.textContent = `Step ${tasteStepIndex + 1} of ${tasteSteps.length + 1} • ${LANGUAGE_NAMES[pair.language] || pair.language} • ${pair.genre}`;
+        const searchInput = document.getElementById('tasteSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            tasteSearchToken += 1;
+            clearTimeout(tasteSearchTimer);
+        }
         loadTastePairPage(false);
     }
     updateTasteSaveButton();
@@ -219,13 +225,18 @@ async function loadTastePairPage(append = false) {
     if (more) more.disabled = true;
     const voteCount = ['hi', 'ta', 'te', 'ml', 'kn'].includes(pair.language) ? 5 : 20;
     try {
-        const results = await Promise.all(['movie', 'tv'].map(async mediaType => {
-            const params = new URLSearchParams({ sort_by: 'popularity.desc', with_original_language: pair.language, with_genres: String(TRENDING_GENRE_IDS[pair.genre]), 'vote_count.gte': String(voteCount), page: String(tastePage) });
+        const settledResults = await Promise.allSettled(['movie', 'tv'].map(async mediaType => {
+            const genreId = TRENDING_GENRE_IDS[pair.genre]?.[mediaType];
+            const params = new URLSearchParams({ sort_by: 'popularity.desc', with_original_language: pair.language, 'vote_count.gte': String(voteCount), page: String(tastePage) });
+            if (genreId) params.set('with_genres', String(genreId));
             const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
             if (!response.ok) throw new Error('TMDB discovery failed.');
             const data = await response.json();
             return (data.results || []).map(result => mapTrendingResult(result, mediaType));
         }));
+        settledResults.filter(result => result.status === 'rejected').forEach(result => console.warn('A Taste Wizard media query failed.', result.reason));
+        const results = settledResults.filter(result => result.status === 'fulfilled').map(result => result.value);
+        if (!results.length) throw new Error('All Taste Wizard media queries failed.');
         const items = results.flat().filter(item => { const key = `${item.mediaType}:${item.id}`; if (tastePairSeen.has(key)) return false; tastePairSeen.add(key); return true; });
         tastePairItems = append ? [...tastePairItems, ...items] : items;
         renderTasteTitleGrid(tastePairItems);
