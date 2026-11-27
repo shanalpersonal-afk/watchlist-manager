@@ -1233,6 +1233,30 @@ function renderTonightWatchlistPicks() {
     });
 }
 
+function normalizeTonightCandidate(item, fallbackMediaType = '') {
+    if (!item || typeof item !== 'object') return null;
+    const mediaType = item.mediaType || item.media_type || fallbackMediaType ||
+        (item.first_air_date ? 'tv' : 'movie');
+    const rawYear = item.year !== undefined
+        ? String(item.year)
+        : (item.release_date || item.first_air_date || '');
+    const year = String(rawYear).split('-')[0] || 'N/A';
+    let rating = 'N/A';
+    if (typeof item.vote_average === 'number') rating = item.vote_average.toFixed(1);
+    else if (item.rating !== undefined && item.rating !== null && item.rating !== 'N/A') rating = String(item.rating);
+    return {
+        ...item,
+        id: item.id || item.tmdbId,
+        tmdbId: item.id || item.tmdbId,
+        mediaType,
+        title: item.title || item.name || 'Untitled',
+        year: year === 'N/A' ? 'N/A' : year,
+        rating,
+        poster: item.poster || (item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : null),
+        overview: item.overview || ''
+    };
+}
+
 // Section B: query fresh Taste Profile matches, then exclude saved and dismissed titles.
 async function generateTonightFreshPicks() {
     const profile = currentUser && userProfileUid === currentUser.uid
@@ -1274,12 +1298,13 @@ async function generateTonightFreshPicks() {
         const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
         if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
         const data = await response.json();
-        return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+        return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
     }));
 
     let candidates = shuffleTonightItems(settled
         .filter(result => result.status === 'fulfilled')
         .flatMap(result => result.value)
+        .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
         .filter(candidate => candidate && candidate.title && !isExcluded(candidate)));
     candidates = [...new Map(candidates.map(candidate =>
         [`${candidate.mediaType}:${candidate.id}`, candidate]
@@ -1292,7 +1317,7 @@ async function generateTonightFreshPicks() {
             const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
             if (!response.ok) throw new Error(`TMDB ${mediaType} discover returned ${response.status}.`);
             const data = await response.json();
-            return (data.results || []).map(result => mapTrendingResult(result, mediaType));
+            return (data.results || []).map(result => normalizeTonightCandidate(result, mediaType));
         }));
         const fallback = fallbackSettled.filter(result => result.status === 'fulfilled').flatMap(result => result.value);
         candidates = [...new Map([...candidates, ...shuffleTonightItems(fallback).filter(candidate => !isExcluded(candidate))]
@@ -1313,7 +1338,9 @@ async function renderTonightFreshPicks(candidates) {
         return;
     }
     container.className = 'grid grid-cols-1 gap-2';
-    candidates.forEach(candidate => {
+    candidates.forEach(rawCandidate => {
+        const candidate = normalizeTonightCandidate(rawCandidate, rawCandidate?.mediaType);
+        if (!candidate?.id) return;
         const card = document.createElement('article');
         card.className = 'flex min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950';
         if (candidate.poster) {

@@ -1,6 +1,14 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.21.2**
+**Current version: v2.21.3**
+
+### v2.21.3 Repository Instructions and Pick Tonight Metadata
+
+- Added [.github/copilot-instructions.md](.github/copilot-instructions.md) to document the strict Vanilla JS Browser Compat architecture and feature handoff rule.
+- **Root cause:** Fresh For Your Taste cards could receive raw TMDB discover objects whose fields use `name`, `release_date`, `first_air_date`, `vote_average`, `poster_path`, `media_type`, and `id`.
+- **Fix:** added `normalizeTonightCandidate()` in `app.js` and normalize results before filtering and rendering. Cards now derive title, year, rating, poster, media type, and TMDB ID consistently.
+- The normalized `mediaType` and `id` are reused by `fetchTMDBTrailerUrl`, `fetchCandidateIndiaPlatforms`, and `saveCandidateToWatchlist`, keeping Trailer and Add actions functional.
+- Current version: **v2.21.3**.
 
 ### v2.21.2 Pick Tonight
 
@@ -228,7 +236,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
 - Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
 - UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
-- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`.
+- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`.
 - Pick Tonight DOM IDs: `#pickTonightBtn`, `#pickTonightModal`, `#pickTonightBody`, `#tonightWatchlistSection`, `#tonightWatchlistResults`, `#tonightFreshResults`, `#rerollTonightBtn`, `#closePickTonightBtn`, `#closePickTonightBackdrop`.
 
 ## 5. Remaining Next Steps
