@@ -5,7 +5,8 @@ window.APP_CONFIG = {
         projectId: "watchlist-studio-14978",
         storageBucket: "watchlist-studio-14978.firebasestorage.app",
         messagingSenderId: "519504217727",
-        appId: "1:519504217727:web:390cbb7bff6baacd1aa14a"
+        appId: "1:519504217727:web:390cbb7bff6baacd1aa14a",
+        measurementId: "G-K2XQYE9RR6"
     },
     tmdbProxyUrl: "https://tmdb-proxy.shanalgr8.workers.dev"
 };
