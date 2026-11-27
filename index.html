@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Watchlist">
-    <title>Watchlist Studio v2.19.1</title>
+    <title>Watchlist Studio v2.20.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
@@ -177,7 +177,8 @@
                             <button id="aiPicksChip" type="button" data-discover-mode="ai" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🤖 AI Picks</button>
                             <button id="openTrendingFiltersBtn" type="button" data-discover-mode="custom" class="discover-mode-chip rounded-full px-2.5 py-1.5 text-xs font-semibold">🎛️ Filter</button>
                         </div>
-                        <div id="aiMoodBar" class="hidden flex items-center gap-2"><input id="aiMoodInput" type="text" maxlength="200" placeholder="Optional mood (e.g. Hindi thriller with a twist)..." class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950"><button id="askAiBtn" type="button" class="shrink-0 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">✨ Ask AI</button></div>
+                        <div id="aiMoodBar" class="hidden flex items-center gap-2"><input id="aiMoodInput" type="text" maxlength="200" placeholder="Optional mood (e.g. Hindi thriller with a twist)..." class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950"><button id="refreshAiPicksBtn" type="button" aria-label="Refresh AI Picks" title="Get fresh AI Picks" class="shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-xs dark:border-slate-700">↻</button><button id="askAiBtn" type="button" class="shrink-0 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-white hover:bg-sky-600">✨ Ask AI</button></div>
+                        <p id="discoverFreshnessNote" class="hidden text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite"></p>
                         <div id="discoverActiveSummary" class="hidden flex min-w-0 items-center gap-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite"><span class="shrink-0">Active:</span><span id="discoverActiveSummaryText" class="min-w-0 flex-1 truncate"></span><button id="clearDiscoverFiltersBtn" type="button" class="shrink-0 font-semibold text-sky-600 underline underline-offset-2 dark:text-sky-400">Clear</button></div>
                         <select id="trendingType" class="hidden"><option value="All">All</option><option value="movie">Movies</option><option value="tv">TV Shows</option></select>
                         <select id="trendingFreshness" class="hidden"><option value="6m" selected>Last 6 Months</option><option value="all">All-Time Popular</option></select>
@@ -263,7 +264,7 @@
 
         <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 pt-3 text-center text-[10px] text-slate-400 dark:text-slate-500">
             <p>Streaming availability powered by TMDB &amp; JustWatch.</p>
-            <p class="mt-1">v2.19.1</p>
+            <p class="mt-1">v2.20.0</p>
             <details class="mx-auto mt-2 max-w-md text-left text-xs text-slate-500 dark:text-slate-400">
                 <summary class="cursor-pointer text-center">📱 How to Install as App</summary>
                 <ul class="mt-2 space-y-1">
@@ -392,7 +393,12 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <!-- Plain browser scripts share global scope and load in dependency order. -->
     <script src="config.js"></script>
+    <script src="api.js"></script>
+    <script src="store.js"></script>
+    <script src="discover.js"></script>
+    <script src="tour.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

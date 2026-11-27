@@ -1,6 +1,6 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.19.1**
+**Current version: v2.20.0**
 
 ## 1. Project Vision
 
@@ -13,12 +13,12 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - **Backend:** Firebase Authentication and Cloud Firestore using the compat SDK.
 - **Metadata and discovery:** TMDB `/search/multi`, `/discover`, `/trending`, and `/watch/providers` endpoints.
 - **Hosting:** [GitHub Pages](https://shanalpersonal-afk.github.io/watchlist-manager/).
-- **Main files:** `index.html`, `config.js`, `app.js`, and the Cloudflare Worker reference `worker.js`. `style.css` is legacy and currently unused.
+- **Main files:** `index.html`, `config.js`, `api.js`, `store.js`, `discover.js`, `tour.js`, `app.js`, and the Cloudflare Worker reference `worker.js`. `style.css` is legacy and currently unused.
 - **Installable web app:** `manifest.json` and Apple web app metadata support standalone installation. The splash screen and dashboard footer show Save as App steps for iPhone, Android, and desktop.
 
-`config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. `index.html` loads it immediately before `app.js`; the TMDB API key is configured as a Worker secret instead of being exposed in the browser.
+`config.js` assigns `window.APP_CONFIG` with the Firebase web configuration and Cloudflare Worker URL. The page loads classic scripts in this order: `config.js` → `api.js` → `store.js` → `discover.js` → `tour.js` → `app.js`. The code stays in vanilla browser JavaScript with no modules, Node.js, or bundler; the TMDB API key is a Worker secret.
 
-## 3. Completed Features Through v2.19.1
+## 3. Completed Features Through v2.20.0
 
 ### v2.19.0 AI Curator
 
@@ -30,8 +30,26 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Reworked `#tasteOnboardingModal` into a language and genre preference step followed by one poster screen per selected pair, with search, pagination, and early finish.
 - Added persisted `dismissedTitles` as negative curator signals alongside separate loved and saved-to-watch buckets.
 - Upgraded the Gemini prompt to return 12 picks across direct matches, recent releases, and hidden gems / cross-language discoveries.
-- Current version is **v2.19.1**.
-- Remaining roadmap: **4-Friend Watch Circle** ratings and `watchedBy`, JSON/CSV Export & Import, and OMDb IMDb/RT scores.
+- This release set the current version to **v2.19.1**.
+
+### v2.20.0 Plain-JS modules, cached AI Picks, and India freshness
+
+- Split browser code into `api.js` for TMDB, `store.js` for Firebase and data actions, `discover.js` for discovery and taste onboarding, `tour.js` for tour and release notes, and `app.js` for UI state and startup.
+- AI Picks are cached in memory using mood, loved titles, and dismissed titles as the cache signature. The refresh button clears the cache and requests fresh Gemini picks.
+- India Discover uses lower vote thresholds for Hindi and regional Indian languages, date windows without the theatrical release filter, and widens sparse six-month queries to twelve months.
+- Current version is **v2.20.0**.
+- Remaining roadmap: **🎲 Pick For Me Tonight**, **▶ Watch Trailer**, **📤 1-Tap Share (`?add=...`)**, and **4-Friend Watch Circle**.
+
+### Updated file structure
+
+- `index.html`: page markup and ordered classic script tags.
+- `config.js`: browser configuration; unchanged.
+- `api.js`: TMDB requests, provider lookup, platform names, and social text parsing.
+- `store.js`: Firebase setup, profiles, shared lists, watchlist listener, and data mutations.
+- `discover.js`: Discover, AI Picks caching, and taste onboarding.
+- `tour.js`: guided tour and What's New release notes.
+- `app.js`: shared browser state, UI helpers, filtering, rendering, and DOM startup.
+- `worker.js`: Cloudflare Worker reference; unchanged.
 
 ## Previous release notes
 
