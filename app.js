@@ -1192,26 +1192,26 @@ function shuffleTonightItems(items) {
 }
 
 // Section A: choose saved unwatched titles and prioritize subscription or free availability.
-function renderTonightWatchlistPicks() {
+async function renderTonightWatchlistPicks() {
     const section = document.getElementById('tonightWatchlistSection');
     const container = document.getElementById('tonightWatchlistResults');
     if (!section || !container) return;
-    const subscriptions = new Set((getUserSubscriptions() || []).map(normalizePlatformName));
     const unwatched = (Array.isArray(currentWatchlistItems) ? currentWatchlistItems : []).filter(item => item && !item.watched);
     if (!unwatched.length) {
         section.classList.add('hidden');
         container.replaceChildren();
         return;
     }
-    const ranked = shuffleTonightItems(unwatched).sort((a, b) => {
-        const availabilityScore = item => {
-            const platforms = getItemPlatforms(item).map(normalizePlatformName);
-            if (platforms.some(platform => subscriptions.has(platform))) return 2;
-            if ((item.freePlatforms || []).length > 0) return 1;
-            return 0;
-        };
-        return availabilityScore(b) - availabilityScore(a);
-    });
+    await Promise.allSettled(unwatched.map(async item => {
+        if ((!Array.isArray(item.platforms) || !Array.isArray(item.freePlatforms)) && (item.tmdbId || item.id)) {
+            const availability = await fetchCandidateIndiaPlatforms(item.type === 'tv' ? 'tv' : 'movie', item.tmdbId || item.id);
+            item.platforms = availability.platforms;
+            item.freePlatforms = availability.freePlatforms;
+            item.platform = availability.platform;
+        }
+    }));
+    const streamable = unwatched.filter(isCandidateStreamableForUser);
+    const ranked = shuffleTonightItems(streamable.length ? streamable : unwatched);
     section.classList.remove('hidden');
     container.replaceChildren();
     ranked.slice(0, 2).forEach(item => {
@@ -1237,6 +1237,35 @@ function renderTonightWatchlistPicks() {
         card.appendChild(label);
         container.appendChild(card);
     });
+}
+
+// Keep Pick Tonight recommendations within India and the user's available services.
+function isCandidateStreamableForUser(candidate) {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const platforms = (Array.isArray(candidate.platforms) ? candidate.platforms : []).map(normalizePlatformName);
+    const freePlatforms = (Array.isArray(candidate.freePlatforms) ? candidate.freePlatforms : []).map(normalizePlatformName);
+    const subscriptions = (Array.isArray(userProfile?.subscriptions) ? userProfile.subscriptions : []).map(normalizePlatformName);
+    if (subscriptions.length) return platforms.some(platform => subscriptions.includes(platform)) || freePlatforms.length > 0;
+    return platforms.length > 0 || freePlatforms.length > 0;
+}
+
+function setTonightAvailabilityBadge(candidate) {
+    const subscriptions = (Array.isArray(userProfile?.subscriptions) ? userProfile.subscriptions : []).map(normalizePlatformName);
+    const platforms = Array.isArray(candidate.platforms) ? candidate.platforms : [];
+    const freePlatforms = Array.isArray(candidate.freePlatforms) ? candidate.freePlatforms : [];
+    const subscribedPlatform = platforms.find(platform => subscriptions.includes(normalizePlatformName(platform)));
+    candidate.platform = subscribedPlatform || (freePlatforms.length ? `🆓 Free: ${freePlatforms[0]}` : (platforms[0] || 'Not Streaming in IN'));
+}
+
+async function fetchTonightIndiaAvailability(candidates) {
+    const settled = await Promise.allSettled(candidates.map(async candidate => {
+        const availability = await fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id);
+        candidate.platforms = availability.platforms;
+        candidate.freePlatforms = availability.freePlatforms;
+        setTonightAvailabilityBadge(candidate);
+        return candidate;
+    }));
+    return settled.filter(result => result.status === 'fulfilled').map(result => result.value).filter(isCandidateStreamableForUser);
 }
 
 function normalizeTonightCandidate(item, fallbackMediaType = '') {
@@ -1343,18 +1372,24 @@ async function generateTonightFreshPicks() {
     }));
     recommendationResults.forEach(result => { if (result.status === 'rejected') { console.error('Pick Tonight recommendations failed.', result.reason); logAppError('pick_tonight', result.reason); } });
     candidates.push(...recommendationResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value));
-    candidates = shuffleTonightItems(uniqueRenderable(candidates)).slice(0, 3);
+    candidates = shuffleTonightItems(uniqueRenderable(candidates)).slice(0, 16);
+    candidates = await fetchTonightIndiaAvailability(candidates);
 
-    // India popularity results fill sparse taste matches across movies and TV.
+    // Query India titles only from services the user can access.
     if (candidates.length < 2) {
-        const fallbackJobs = ['movie', 'tv'].flatMap(mediaType => [1, 2, 3].map(page => ({ mediaType, page })));
-        const fallbackSettled = await Promise.allSettled(fallbackJobs.map(async ({ mediaType, page }) => {
-            const params = new URLSearchParams({
-                watch_region: 'IN',
-                sort_by: 'popularity.desc',
-                'vote_count.gte': '5',
-                page: String(page)
-            });
+        const subscriptions = (Array.isArray(profile.subscriptions) ? profile.subscriptions : []).map(normalizePlatformName);
+        const providerMap = subscriptions.length ? await fetchIndiaWatchProviderMap() : new Map();
+        const subscribedProviderIds = [...new Set(subscriptions.flatMap(name => String(providerMap.get(name) || '').split('|').filter(Boolean)))].join('|');
+        const monetizationQueries = subscriptions.length
+            ? [
+                ...(subscribedProviderIds ? [{ monetization: 'flatrate', providers: subscribedProviderIds }] : []),
+                { monetization: 'free|ads', providers: '' }
+            ]
+            : [{ monetization: 'flatrate|free|ads', providers: '' }];
+        const fallbackJobs = ['movie', 'tv'].flatMap(mediaType => monetizationQueries.map(query => ({ mediaType, query })));
+        const fallbackSettled = await Promise.allSettled(fallbackJobs.map(async ({ mediaType, query }) => {
+            const params = new URLSearchParams({ watch_region: 'IN', with_watch_monetization_types: query.monetization, sort_by: 'popularity.desc', 'vote_count.gte': '5', page: '1' });
+            if (query.providers) params.set('with_watch_providers', query.providers);
             const response = await fetch(buildTMDBUrl(`/discover/${mediaType}`, params));
             if (!response.ok) throw new Error(`TMDB India ${mediaType} fallback returned ${response.status}.`);
             const data = await response.json();
@@ -1367,10 +1402,12 @@ async function generateTonightFreshPicks() {
             .filter(result => result.status === 'fulfilled')
             .flatMap(result => result.value)
             .map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType));
-        candidates = [...uniqueRenderable([...candidates, ...shuffleTonightItems(fallback)])].slice(0, 3);
+        const fallbackPool = [...uniqueRenderable([...candidates, ...shuffleTonightItems(fallback)])].slice(0, 16);
+        candidates = await fetchTonightIndiaAvailability(fallbackPool);
+        candidates = shuffleTonightItems(candidates).slice(0, 3);
         if (candidates.length < 2) console.warn('Pick Tonight could not find two eligible cards after the India streaming fallback.', { count: candidates.length });
     }
-    return candidates.map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
+    return shuffleTonightItems(candidates).map(candidate => normalizeTonightCandidate(candidate, candidate?.mediaType))
         .filter(isTonightCandidateRenderable)
         .slice(0, 3);
 }
@@ -1462,17 +1499,13 @@ async function renderTonightFreshPicks(candidates) {
         card.appendChild(details);
         container.appendChild(card);
 
-        fetchCandidateIndiaPlatforms(candidate.mediaType, candidate.id).then(providers => {
-            candidate.platforms = providers.platforms;
-            candidate.freePlatforms = providers.freePlatforms;
-            candidate.platform = providers.platform;
-            ott.textContent = providers.platform || 'Not Streaming in IN';
-        });
+        setTonightAvailabilityBadge(candidate);
+        ott.textContent = candidate.platform;
     });
 }
 
 async function generateTonightPicks() {
-    renderTonightWatchlistPicks();
+    await renderTonightWatchlistPicks();
     const container = document.getElementById('tonightFreshResults');
     if (container) {
         container.textContent = 'Finding fresh picks…';

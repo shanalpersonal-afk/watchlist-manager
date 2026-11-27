@@ -1,6 +1,14 @@
 # Project Context: Watchlist Studio
 
-**Current version: v2.21.4**
+**Current version: v2.21.5**
+
+### v2.21.5 Pick Tonight India streaming filters
+
+- **Change:** Fresh For Your Taste now checks each candidate's India `IN.flatrate`, `IN.free`, and `IN.ads` availability before rendering. With subscriptions configured, only titles on a subscribed OTT or on a free/ad-supported source are eligible; without subscriptions, any India paid, free, or ad-supported source is eligible.
+- Tier 1 expands a candidate pool of up to 16 from taste queries, cached AI picks, and TMDB recommendations, then resolves provider availability in parallel. If fewer than two remain, Tier 2 queries India movies and TV with matching TMDB provider/monetization constraints, then rechecks each result through provider details before rendering.
+- From Your Watchlist now resolves missing India availability, puts titles on subscribed OTTs or free sources first, and falls back to other unwatched saved titles only when none qualify.
+- New helper: `isCandidateStreamableForUser`; supporting helpers: `setTonightAvailabilityBadge`, `fetchTonightIndiaAvailability`.
+- Current version/status: **v2.21.5**.
 
 ### v2.21.4 Pick Tonight recommendation recovery
 
@@ -236,7 +244,7 @@ Watchlist Studio is a personal media discovery and tracking app. It helps users 
 - Discover: `loadTrendingDiscover`, `loadPersonalizedRecommendations`, `loadAIPicksRecommendations`, `openTasteOnboardingModal`, `loadTastePairPage`, `resetTrendingDiscover`.
 - Tour: `startWatchlistTour`, `showWatchlistTourStep`, `endWatchlistTour`, `APP_UPDATES`, `getRecentUpdates`, `openWhatsNewModal`.
 - UI and library: `switchView`, `showToast`, `openDetailPreview`, `shareActivePreview`, `surpriseMe`, `getFilteredLibraryItems`, `populateFilterDropdowns`, `renderWatchlist`, `renderGroupedCards`, `renderGroupCards`, `bulkUploadItems`.
-- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`, `isTonightCandidateRenderable`, `isAlreadyInWatchlist` (hardened).
+- Pick Tonight: `openPickTonightModal`, `generateTonightPicks`, `generateTonightFreshPicks`, `rerollTonightPicks`, `renderTonightWatchlistPicks`, `renderTonightFreshPicks`, `normalizeTonightCandidate`, `isTonightCandidateRenderable`, `isCandidateStreamableForUser`, `setTonightAvailabilityBadge`, `fetchTonightIndiaAvailability`, `isAlreadyInWatchlist` (hardened).
 - Pick Tonight DOM IDs: `#pickTonightBtn`, `#pickTonightModal`, `#pickTonightBody`, `#tonightWatchlistSection`, `#tonightWatchlistResults`, `#tonightFreshResults`, `#rerollTonightBtn`, `#closePickTonightBtn`, `#closePickTonightBackdrop`.
 
 ## 5. Remaining Next Steps

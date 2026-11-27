@@ -31,7 +31,7 @@ function logAppError(source, error) {
         db.collection('errorLogs').add({
             message,
             source: String(source || 'unknown'),
-            version: 'v2.21.4',
+            version: 'v2.21.5',
             userAgent: navigator.userAgent,
             uid: currentUser.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()

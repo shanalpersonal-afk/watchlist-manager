@@ -161,6 +161,7 @@ async function endWatchlistTour(markCompleted = true, wasSkipped = false) {
 }
 
 const APP_UPDATES = [
+    { version: 'v2.21.5', date: '2026-11-27', title: 'Pick Tonight India streaming filters', items: ['Fresh picks now require India streaming availability.', 'When subscriptions are set, picks are limited to those OTTs or free and ad-supported sources.', 'Watchlist picks prioritize titles available on your OTTs or free sources.'] },
     { version: 'v2.21.3', date: '2026-11-27', title: 'Pick Tonight metadata fix', items: ['Normalized TMDB title, year, rating, poster, media type, and ID fields.', 'Kept Trailer and Add actions working with every Fresh For Your Taste card.', 'Added strict repository instructions for future browser-compatible changes.'] },
     { version: 'v2.21.2', date: '2026-11-27', title: 'Pick Tonight hybrid recommendations', items: ['Added a prominent labeled Pick Tonight button in the Library toolbar.', 'Combined saved watchlist picks with fresh Taste Profile recommendations.', 'Added re-roll, trailers, India OTT badges, and one-tap add actions.'] },
     { version: 'v2.21.0', date: '2026-11-27', title: 'Surprise, trailers, and sharing', items: ['Pick a random title from your To Watch list.', 'Open trailers and share add-to-watchlist links from previews.', 'Track browser errors and key app events.'] },
